@@ -7,16 +7,13 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.helpers import selector
 
-from kompromiss import const
+from . import const
 
 
 class ConfigFlowHandler(config_entries.ConfigFlow, domain=const.DOMAIN):
-    """Handle a config flow for Kompromiss."""
-
     VERSION = 1
 
     async def async_step_user(self, user_input=None):
-        """Handle a user initiated config flow."""
         if user_input is not None:
             return self.async_create_entry(title="Kompromiss", data=user_input)
         return self.async_show_form(step_id="user", data_schema=vol.Schema({}))
@@ -30,7 +27,6 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         self._entry = entry
 
     async def async_step_init(self, user_input=None):
-        """Initialize options flow."""
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
 
@@ -54,13 +50,15 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 vol.Optional(
                     const.CONF_MINIMUM_INDOOR_TEMPERATURE,
                     default=data.get(
-                        const.CONF_MINIMUM_INDOOR_TEMPERATURE, const.DEFAULT_T_MIN
+                        const.CONF_MINIMUM_INDOOR_TEMPERATURE,
+                        const.DEFAULT_MINIMUM_INDOOR_TEMPERATURE,
                     ),
                 ): vol.Coerce(float),
                 vol.Optional(
                     const.CONF_MAXIMUM_INDOOR_TEMPERATURE,
                     default=data.get(
-                        const.CONF_MAXIMUM_INDOOR_TEMPERATURE, const.DEFAULT_T_MAX
+                        const.CONF_MAXIMUM_INDOOR_TEMPERATURE,
+                        const.DEFAULT_MAXIMUM_INDOOR_TEMPERATURE,
                     ),
                 ): vol.Coerce(float),
                 vol.Optional(
