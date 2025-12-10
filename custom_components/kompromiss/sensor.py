@@ -13,6 +13,7 @@ from .const import (
     DOMAIN,
     CONF_ACTUAL_OUTDOOR_TEMPERATURE_SENSOR,
     CONF_INDOOR_TEMPERATURE_SENSOR,
+    CONF_ELECTRICITY_PRICE_SENSOR,
 )
 
 
@@ -26,6 +27,7 @@ async def async_setup_entry(
         ActualOutdoorTemperatureSensor(config_entry, device.id),
         IndoorTemperatureSensor(config_entry, device.id),
         TemperatureOffsetSensor(config_entry, device.id),
+        ElectricityPriceSensor(config_entry, device.id),
     ]
     async_add_entities(sensors)
 
@@ -59,7 +61,6 @@ class SimulatedOutdoorTemperatureSensor(SensorEntity):
         if not entity_id:
             return None
 
-        # Lazily initialize the controller
         if self._controller is None:
             self._controller = SimulatedOutdoorTemperatureController(hass, entity_id)
 
@@ -177,3 +178,43 @@ class TemperatureOffsetSensor(SensorEntity):
     @property
     def translation_key(self) -> str:
         return "temperature_offset"
+
+
+class ElectricityPriceSensor(SensorEntity):
+    """Sensor entity for the current electricity price."""
+
+    _attr_has_entity_name = True
+    _attr_name = "Electricity Price"
+    _attr_unique_id = "kompromiss_electricity_price"
+
+    def __init__(self, config_entry: ConfigEntry, device_id: str):
+        self._config_entry = config_entry
+        self._device_id = device_id
+
+    @property
+    def device_info(self):
+        return {"identifiers": {(DOMAIN, self._config_entry.entry_id)}}
+
+    @property
+    def native_value(self) -> float | None:
+        hass = self.hass
+        if not hass:
+            return None
+
+        entity_id = self._config_entry.data.get(CONF_ELECTRICITY_PRICE_SENSOR)
+
+        if not entity_id:
+            return None
+
+        state = hass.states.get(entity_id)
+        if state is None:
+            return None
+
+        try:
+            return float(state.state)
+        except (ValueError, TypeError):
+            return None
+
+    @property
+    def translation_key(self) -> str:
+        return "electricity_price"
