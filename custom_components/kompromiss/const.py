@@ -3,7 +3,7 @@ Constants for the Kompromiss integration.
 """
 
 DOMAIN = "kompromiss"
-PLATFORMS: list[str] = ["switch", "sensor"]
+PLATFORMS: list[str] = ["sensor"]
 
 CONF_TEMPERATURE_SENSOR = "temperature_sensor"
 CONF_ELECTRICITY_PRICE_SENSOR = "electricity_price_sensor"
