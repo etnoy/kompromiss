@@ -1,0 +1,6 @@
+{
+  "name": "Kompromiss",
+  "render_readme": true,
+  "domains": ["kompromiss"],
+  "country": ["*"]
+}
