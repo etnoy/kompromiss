@@ -1,0 +1,12 @@
+[tool.pylint.format]
+max-line-length = 120
+
+[tool.pylint.master]
+score = false
+
+[tool.pylint.reports]
+output-format = "colorized"
+
+[tool.ruff]
+line-length = 88
+target-version = "py314"
