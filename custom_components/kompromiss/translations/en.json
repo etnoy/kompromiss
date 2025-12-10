@@ -3,6 +3,23 @@
     "sensor": {
       "simulated_outdoor_temperature": {
         "name": "Simulated Outdoor Temperature"
+      },
+      "actual_outdoor_temperature": {
+        "name": "Actual Outdoor Temperature"
+      },
+      "indoor_temperature": {
+        "name": "Indoor Temperature"
+      },
+      "temperature_offset": {
+        "name": "Temperature Offset"
+      }
+    },
+    "number": {
+      "minimum_indoor_temperature": {
+        "name": "Minimum Indoor Temperature"
+      },
+      "maximum_indoor_temperature": {
+        "name": "Maximum Indoor Temperature"
       }
     }
   }

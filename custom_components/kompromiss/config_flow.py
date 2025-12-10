@@ -60,20 +60,6 @@ class OptionsFlowHandler(OptionsFlow):
         schema = vol.Schema(
             {
                 vol.Optional(
-                    const.CONF_MINIMUM_INDOOR_TEMPERATURE,
-                    default=data.get(
-                        const.CONF_MINIMUM_INDOOR_TEMPERATURE,
-                        const.DEFAULT_MINIMUM_INDOOR_TEMPERATURE,
-                    ),
-                ): vol.Coerce(float),
-                vol.Optional(
-                    const.CONF_MAXIMUM_INDOOR_TEMPERATURE,
-                    default=data.get(
-                        const.CONF_MAXIMUM_INDOOR_TEMPERATURE,
-                        const.DEFAULT_MAXIMUM_INDOOR_TEMPERATURE,
-                    ),
-                ): vol.Coerce(float),
-                vol.Optional(
                     const.CONF_LOWEST_SIMULATED_TEMPERATURE,
                     default=data.get(
                         const.CONF_LOWEST_SIMULATED_TEMPERATURE,
