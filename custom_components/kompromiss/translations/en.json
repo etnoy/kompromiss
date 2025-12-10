@@ -1,0 +1,9 @@
+{
+  "entity": {
+    "sensor": {
+      "simulated_outdoor_temperature": {
+        "name": "Simulated Outdoor Temperature"
+      }
+    }
+  }
+}

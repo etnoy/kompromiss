@@ -1,21 +1,25 @@
 """Kompromiss component"""
 
-import logging
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
 
-from homeassistant.core import HomeAssistant, ServiceCall
+from kompromiss import const
+
+PLATFORMS: list[str] = ["switch", "sensor"]
 
 
-DOMAIN = "kompromiss"
-_LOGGER = logging.getLogger(__name__)
-
-
-async def async_setup(hass: HomeAssistant) -> bool:
+async def async_setup() -> bool:
     """Set up the Kompromiss component."""
-
-    def my_service(call: ServiceCall) -> None:
-        """My first service."""
-        _LOGGER.info("Received data: %s", call.data)
-
-    hass.services.async_register(DOMAIN, "demo", my_service)
-
     return True
+
+
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    return True
+
+
+async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if unload_ok:
+        hass.data[const.DOMAIN].pop(entry.entry_id, None)
+    return unload_ok
