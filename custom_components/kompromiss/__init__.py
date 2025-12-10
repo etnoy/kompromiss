@@ -1,20 +1,20 @@
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
-from . import const
+from .const import PLATFORMS, DOMAIN
 
 
 async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
-    hass.data.setdefault(const.DOMAIN, {})
+    hass.data.setdefault(DOMAIN, {})
 
-    await hass.config_entries.async_forward_entry_setups(config_entry, const.PLATFORMS)
+    await hass.config_entries.async_forward_entry_setups(config_entry, PLATFORMS)
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
     unload_ok = await hass.config_entries.async_unload_platforms(
-        config_entry, const.PLATFORMS
+        config_entry, PLATFORMS
     )
     if unload_ok:
-        hass.data[const.DOMAIN].pop(config_entry.entry_id, None)
+        hass.data[DOMAIN].pop(config_entry.entry_id, None)
     return unload_ok

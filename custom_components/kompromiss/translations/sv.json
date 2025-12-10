@@ -11,7 +11,7 @@
         "name": "Innetemperatur"
       },
       "temperature_offset": {
-        "name": "Temperaturpåverkan"
+        "name": "Påverkan"
       }
     },
     "number": {
