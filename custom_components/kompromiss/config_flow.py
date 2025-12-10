@@ -21,7 +21,14 @@ class ConfigFlowHandler(ConfigFlow, domain=const.DOMAIN):
         schema = vol.Schema(
             {
                 vol.Required(
-                    const.CONF_TEMPERATURE_SENSOR,
+                    const.CONF_ACTUAL_OUTDOOR_TEMPERATURE_SENSOR,
+                ): selector.EntitySelector(
+                    selector.EntitySelectorConfig(
+                        domain=["sensor"], device_class="temperature"
+                    )
+                ),
+                vol.Required(
+                    const.CONF_INDOOR_TEMPERATURE_SENSOR,
                 ): selector.EntitySelector(
                     selector.EntitySelectorConfig(
                         domain=["sensor"], device_class="temperature"
@@ -52,20 +59,6 @@ class OptionsFlowHandler(OptionsFlow):
         data = {**self._entry.data, **(self._entry.options or {})}
         schema = vol.Schema(
             {
-                vol.Required(
-                    const.CONF_TEMPERATURE_SENSOR,
-                    default=data.get(const.CONF_TEMPERATURE_SENSOR),
-                ): selector.EntitySelector(
-                    selector.EntitySelectorConfig(
-                        domain=["sensor"], device_class="temperature"
-                    )
-                ),
-                vol.Required(
-                    const.CONF_ELECTRICITY_PRICE_SENSOR,
-                    default=data.get(const.CONF_ELECTRICITY_PRICE_SENSOR),
-                ): selector.EntitySelector(
-                    selector.EntitySelectorConfig(domain=["sensor"])
-                ),
                 vol.Optional(
                     const.CONF_MINIMUM_INDOOR_TEMPERATURE,
                     default=data.get(
