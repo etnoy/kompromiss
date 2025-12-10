@@ -1,8 +1,14 @@
 """Sensor entity for the Kompromiss heat price optimizer."""
 
 from __future__ import annotations
+import logging
+from typing import Final
 
-from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorEntity,
+    SensorStateClass,
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
@@ -15,6 +21,8 @@ from .const import (
     CONF_INDOOR_TEMPERATURE_SENSOR,
     CONF_ELECTRICITY_PRICE_SENSOR,
 )
+
+_LOGGER: Final = logging.getLogger(__name__)
 
 
 async def async_setup_entry(
@@ -36,6 +44,7 @@ class SimulatedOutdoorTemperatureSensor(SensorEntity):
     """Sensor entity for the simulated outdoor temperature, i.e. the temperature that is sent to the heat pump."""
 
     _attr_device_class = SensorDeviceClass.TEMPERATURE
+    _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = "°C"
     _attr_has_entity_name = True
     _attr_name = "Simulated Outdoor Temperature"
@@ -44,7 +53,21 @@ class SimulatedOutdoorTemperatureSensor(SensorEntity):
     def __init__(self, config_entry: ConfigEntry, device_id: str):
         self._config_entry = config_entry
         self._device_id = device_id
+        self._entity_id = self._config_entry.data.get(
+            CONF_ACTUAL_OUTDOOR_TEMPERATURE_SENSOR
+        )
         self._controller: SimulatedOutdoorTemperatureController | None = None
+
+    async def async_added_to_hass(self):
+        self._controller = SimulatedOutdoorTemperatureController(
+            self.hass, self._entity_id
+        )
+
+        _LOGGER.debug(
+            "Added simulated outdoor temperature sensor for entity %s", self._entity_id
+        )
+
+        return super().async_added_to_hass()
 
     @property
     def device_info(self):
@@ -52,18 +75,6 @@ class SimulatedOutdoorTemperatureSensor(SensorEntity):
 
     @property
     def native_value(self) -> float | None:
-        hass = self.hass
-        if not hass:
-            return None
-
-        entity_id = self._config_entry.data.get(CONF_ACTUAL_OUTDOOR_TEMPERATURE_SENSOR)
-
-        if not entity_id:
-            return None
-
-        if self._controller is None:
-            self._controller = SimulatedOutdoorTemperatureController(hass, entity_id)
-
         return self._controller.get_simulated_temperature()
 
     @property
@@ -183,13 +194,30 @@ class TemperatureOffsetSensor(SensorEntity):
 class ElectricityPriceSensor(SensorEntity):
     """Sensor entity for the current electricity price."""
 
+    _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_has_entity_name = True
     _attr_name = "Electricity Price"
     _attr_unique_id = "kompromiss_electricity_price"
+    _attr_native_unit_of_measurement: str | None = None
+    _attr_suggested_display_precision = 2
+    _attr_icon = "mdi:cash"
 
     def __init__(self, config_entry: ConfigEntry, device_id: str):
         self._config_entry = config_entry
         self._device_id = device_id
+        self._entity_id: str | None = None
+
+    async def async_added_to_hass(self):
+        self._entity_id = self._config_entry.data.get(CONF_ELECTRICITY_PRICE_SENSOR)
+
+        state = self.hass.states.get(self._entity_id)
+
+        if state:
+            self._attr_native_unit_of_measurement = state.attributes.get(
+                "unit_of_measurement"
+            )
+
+        return super().async_added_to_hass()
 
     @property
     def device_info(self):
@@ -197,18 +225,14 @@ class ElectricityPriceSensor(SensorEntity):
 
     @property
     def native_value(self) -> float | None:
-        hass = self.hass
-        if not hass:
-            return None
+        state = self.hass.states.get(self._entity_id)
 
-        entity_id = self._config_entry.data.get(CONF_ELECTRICITY_PRICE_SENSOR)
-
-        if not entity_id:
-            return None
-
-        state = hass.states.get(entity_id)
         if state is None:
             return None
+
+        self._attr_native_unit_of_measurement = state.attributes.get(
+            "unit_of_measurement"
+        )
 
         try:
             return float(state.state)
