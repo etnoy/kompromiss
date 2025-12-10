@@ -12,6 +12,9 @@
       },
       "temperature_offset": {
         "name": "Temperaturpåverkan"
+      },
+      "electricity_price": {
+        "name": "Elpris"
       }
     },
     "number": {
