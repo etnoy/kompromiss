@@ -6,6 +6,7 @@ from . import const
 
 async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
     hass.data.setdefault(const.DOMAIN, {})
+
     await hass.config_entries.async_forward_entry_setups(config_entry, const.PLATFORMS)
     return True
 

@@ -8,16 +8,19 @@ from homeassistant.core import HomeAssistant
 
 from . import const
 from .controller import SimulatedOutdoorTemperatureController
+from .device import ensure_device
 
 
 async def async_setup_entry(
-    _hass: HomeAssistant, config_entry: ConfigEntry, async_add_entities
+    hass: HomeAssistant, config_entry: ConfigEntry, async_add_entities
 ):
+    device = ensure_device(hass, config_entry)
+
     sensors = [
-        SimulatedOutdoorTemperatureSensor(config_entry),
-        ActualOutdoorTemperatureSensor(config_entry),
-        IndoorTemperatureSensor(config_entry),
-        TemperatureOffsetSensor(config_entry),
+        SimulatedOutdoorTemperatureSensor(config_entry, device.id),
+        ActualOutdoorTemperatureSensor(config_entry, device.id),
+        IndoorTemperatureSensor(config_entry, device.id),
+        TemperatureOffsetSensor(config_entry, device.id),
     ]
     async_add_entities(sensors)
 
@@ -31,10 +34,16 @@ class SimulatedOutdoorTemperatureSensor(SensorEntity):
     _attr_name = "Simulated Outdoor Temperature"
     _attr_unique_id = "kompromiss_simulated_outdoor_temperature"
 
-    def __init__(self, config_entry: ConfigEntry):
+    def __init__(self, config_entry: ConfigEntry, device_id: str):
         """Initialize the sensor with the configured temperature sensor entity ID."""
         self._config_entry = config_entry
+        self._device_id = device_id
         self._controller: SimulatedOutdoorTemperatureController | None = None
+
+    @property
+    def device_info(self):
+        """Return device info to link entity to device."""
+        return {"identifiers": {(const.DOMAIN, self._config_entry.entry_id)}}
 
     @property
     def native_value(self) -> float | None:
@@ -58,7 +67,6 @@ class SimulatedOutdoorTemperatureSensor(SensorEntity):
 
     @property
     def translation_key(self) -> str:
-        """Return the translation key for the sensor."""
         return "simulated_outdoor_temperature"
 
 
@@ -70,10 +78,15 @@ class ActualOutdoorTemperatureSensor(SensorEntity):
     _attr_has_entity_name = True
     _attr_name = "Actual Outdoor Temperature"
 
-    def __init__(self, config_entry: ConfigEntry):
+    def __init__(self, config_entry: ConfigEntry, device_id: str):
         """Initialize the sensor with the configured temperature sensor entity ID."""
         self._config_entry = config_entry
+        self._device_id = device_id
         self._attr_unique_id = "kompromiss_actual_outdoor_temperature"
+
+    @property
+    def device_info(self):
+        return {"identifiers": {(const.DOMAIN, self._config_entry.entry_id)}}
 
     @property
     def native_value(self) -> float | None:
@@ -111,10 +124,16 @@ class IndoorTemperatureSensor(SensorEntity):
     _attr_has_entity_name = True
     _attr_name = "Indoor Temperature"
 
-    def __init__(self, config_entry: ConfigEntry):
+    def __init__(self, config_entry: ConfigEntry, device_id: str):
         """Initialize the sensor with the configured temperature sensor entity ID."""
         self._config_entry = config_entry
+        self._device_id = device_id
         self._attr_unique_id = "kompromiss_indoor_temperature"
+
+    @property
+    def device_info(self):
+        """Return device info to link entity to device."""
+        return {"identifiers": {(const.DOMAIN, self._config_entry.entry_id)}}
 
     @property
     def native_value(self) -> float | None:
@@ -150,9 +169,15 @@ class TemperatureOffsetSensor(SensorEntity):
     _attr_name = "Temperature Offset"
     _attr_unique_id = "kompromiss_temperature_offset"
 
-    def __init__(self, config_entry: ConfigEntry):
+    def __init__(self, config_entry: ConfigEntry, device_id: str):
         """Initialize the sensor."""
         self._config_entry = config_entry
+        self._device_id = device_id
+
+    @property
+    def device_info(self):
+        """Return device info to link entity to device."""
+        return {"identifiers": {(const.DOMAIN, self._config_entry.entry_id)}}
 
     @property
     def native_value(self) -> float:
