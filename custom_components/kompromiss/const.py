@@ -1,7 +1,3 @@
-"""
-Constants for the Kompromiss integration.
-"""
-
 DOMAIN = "kompromiss"
 PLATFORMS: list[str] = ["sensor"]
 
@@ -16,8 +12,8 @@ CONF_STEP_MINUTES = "step_minutes"
 CONF_HORIZON_STEPS = "horizon_steps"
 CONF_ENABLED = "enabled"
 
-DEFAULT_T_MIN = 19.5
-DEFAULT_T_MAX = 22.5
+DEFAULT_MINIMUM_INDOOR_TEMPERATURE = 19.5
+DEFAULT_MAXIMUM_INDOOR_TEMPERATURE = 22.5
 DEFAULT_LOWEST_SIMULATED_TEMPERATURE = -40.0
 # 20 degrees is often where summer mode kicks in, so let's put 19 as the max
 DEFAULT_HIGHEST_SIMULATED_TEMPERATURE = 19.0
@@ -25,11 +21,3 @@ DEFAULT_HIGHEST_SIMULATED_TEMPERATURE = 19.0
 DEFAULT_STEP_MINUTES = 15
 DEFAULT_HORIZON_STEPS = 8
 DEFAULT_ENABLED = True
-
-DATA_COORDINATOR = "coordinator"
-
-ATTR_COMPUTED_SOT = "computed_sot"
-ATTR_VIRTUAL_TEMP = "virtual_temp"
-ATTR_COLDEST = "coldest"
-ATTR_HOTTEST = "hottest"
-ATTR_PRICE_NOW = "price_now"

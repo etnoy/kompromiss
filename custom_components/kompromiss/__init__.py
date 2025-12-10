@@ -1,7 +1,7 @@
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
-from kompromiss import const
+from . import const
 
 
 async def async_setup() -> bool:
