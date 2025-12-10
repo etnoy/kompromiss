@@ -13,7 +13,7 @@ async def async_setup_entry(
     _hass: HomeAssistant, config_entry: ConfigEntry, async_add_entities
 ):
     sensors = [
-        SimulatedOutdoorTemperatureSensor(),
+        SimulatedOutdoorTemperatureSensor(config_entry),
         ActualOutdoorTemperatureSensor(config_entry),
         IndoorTemperatureSensor(config_entry),
     ]
@@ -29,15 +29,37 @@ class SimulatedOutdoorTemperatureSensor(SensorEntity):
     _attr_name = "Simulated Outdoor Temperature"
     _attr_unique_id = "kompromiss_simulated_outdoor_temperature"
 
+    def __init__(self, config_entry: ConfigEntry):
+        """Initialize the sensor with the configured temperature sensor entity ID."""
+        self._config_entry = config_entry
+
+    @property
+    def native_value(self) -> float | None:
+        """Compute the simulated outdoor temperature."""
+        hass = self.hass
+        if not hass:
+            return None
+
+        entity_id = self._config_entry.data.get(
+            const.CONF_ACTUAL_OUTDOOR_TEMPERATURE_SENSOR
+        )
+
+        if not entity_id:
+            return None
+
+        state = hass.states.get(entity_id)
+        if state is None:
+            return None
+
+        try:
+            return float(state.state) + 10.0
+        except (ValueError, TypeError):
+            return None
+
     @property
     def translation_key(self) -> str:
         """Return the translation key for the sensor."""
         return "simulated_outdoor_temperature"
-
-    @property
-    def native_value(self) -> float:
-        """Return the current temperature value in Celsius."""
-        return 20.0
 
 
 class ActualOutdoorTemperatureSensor(SensorEntity):
