@@ -1,3 +1,7 @@
+[project]
+name = "kompromiss"
+version = "0.0.1"
+
 [tool.pylint.format]
 max-line-length = 120
 
