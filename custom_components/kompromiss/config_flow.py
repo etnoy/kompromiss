@@ -10,6 +10,21 @@ from homeassistant.helpers import selector
 from kompromiss import const
 
 
+class ConfigFlowHandler(config_entries.ConfigFlow, domain=const.DOMAIN):
+    """Handle a config flow for Kompromiss."""
+
+    VERSION = 1
+
+    async def async_step_user(self, user_input=None):
+        """Handle a user initiated config flow."""
+        if user_input is not None:
+            return self.async_create_entry(title="Kompromiss", data=user_input)
+        return self.async_show_form(step_id="user", data_schema=vol.Schema({}))
+
+    def is_matching(self, other_flow) -> bool:
+        return True
+
+
 class OptionsFlowHandler(config_entries.OptionsFlow):
     def __init__(self, entry: config_entries.ConfigEntry):
         self._entry = entry
