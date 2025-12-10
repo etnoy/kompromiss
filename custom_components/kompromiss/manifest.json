@@ -6,6 +6,7 @@
   "documentation": "https://github.com/etnoy/kompromiss",
   "issue_tracker": "https://github.com/etnoy/kompromiss/issues",
   "iot_class": "local_polling",
+  "config_flow": true,
   "requirements": [],
   "version": "0.0.1"
 }
