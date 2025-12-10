@@ -4,7 +4,7 @@
   "codeowners": ["@etnoy"],
   "dependencies": [],
   "documentation": "https://github.com/etnoy/kompromiss",
-  "issue_tracker": "hhttps://github.com/etnoy/kompromiss/issues",
+  "issue_tracker": "https://github.com/etnoy/kompromiss/issues",
   "iot_class": "local_polling",
   "requirements": [],
   "version": "0.0.1"
