@@ -7,6 +7,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
 from . import const
+from .controller import SimulatedOutdoorTemperatureController
 
 
 async def async_setup_entry(
@@ -16,6 +17,7 @@ async def async_setup_entry(
         SimulatedOutdoorTemperatureSensor(config_entry),
         ActualOutdoorTemperatureSensor(config_entry),
         IndoorTemperatureSensor(config_entry),
+        TemperatureOffsetSensor(config_entry),
     ]
     async_add_entities(sensors)
 
@@ -32,6 +34,7 @@ class SimulatedOutdoorTemperatureSensor(SensorEntity):
     def __init__(self, config_entry: ConfigEntry):
         """Initialize the sensor with the configured temperature sensor entity ID."""
         self._config_entry = config_entry
+        self._controller: SimulatedOutdoorTemperatureController | None = None
 
     @property
     def native_value(self) -> float | None:
@@ -47,14 +50,11 @@ class SimulatedOutdoorTemperatureSensor(SensorEntity):
         if not entity_id:
             return None
 
-        state = hass.states.get(entity_id)
-        if state is None:
-            return None
+        # Lazily initialize the controller
+        if self._controller is None:
+            self._controller = SimulatedOutdoorTemperatureController(hass, entity_id)
 
-        try:
-            return float(state.state) + 10.0
-        except (ValueError, TypeError):
-            return None
+        return self._controller.get_simulated_temperature()
 
     @property
     def translation_key(self) -> str:
@@ -139,3 +139,27 @@ class IndoorTemperatureSensor(SensorEntity):
     @property
     def translation_key(self):
         return "indoor_temperature"
+
+
+class TemperatureOffsetSensor(SensorEntity):
+    """Sensor entity for the temperature offset applied to outdoor temperature."""
+
+    _attr_device_class = SensorDeviceClass.TEMPERATURE
+    _attr_native_unit_of_measurement = "°C"
+    _attr_has_entity_name = True
+    _attr_name = "Temperature Offset"
+    _attr_unique_id = "kompromiss_temperature_offset"
+
+    def __init__(self, config_entry: ConfigEntry):
+        """Initialize the sensor."""
+        self._config_entry = config_entry
+
+    @property
+    def native_value(self) -> float:
+        """Return the temperature offset value."""
+        return SimulatedOutdoorTemperatureController.TEMPERATURE_OFFSET
+
+    @property
+    def translation_key(self) -> str:
+        """Return the translation key for the sensor."""
+        return "temperature_offset"
