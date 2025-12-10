@@ -1,12 +1,7 @@
-from homeassistant.config_entries import ConfigEntry, ConfigType
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
 from . import const
-
-
-async def async_setup(hass: HomeAssistant, _config: ConfigType) -> bool:
-    hass.data.setdefault(const.DOMAIN, {})
-    return True
 
 
 async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:

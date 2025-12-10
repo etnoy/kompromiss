@@ -2,27 +2,46 @@
 
 from __future__ import annotations
 
+from typing import Any
 
 import voluptuous as vol
 from homeassistant import config_entries
+from homeassistant.config_entries import ConfigFlow, OptionsFlow
+
 from homeassistant.helpers import selector
 
 from . import const
 
 
-class ConfigFlowHandler(config_entries.ConfigFlow, domain=const.DOMAIN):
-    VERSION = 1
-
-    async def async_step_user(self, user_input=None):
+class ConfigFlowHandler(ConfigFlow, domain=const.DOMAIN):
+    async def async_step_user(self, user_input: dict[str, Any] | None = None):
         if user_input is not None:
             return self.async_create_entry(title="Kompromiss", data=user_input)
-        return self.async_show_form(step_id="user", data_schema=vol.Schema({}))
+
+        schema = vol.Schema(
+            {
+                vol.Required(
+                    const.CONF_TEMPERATURE_SENSOR,
+                ): selector.EntitySelector(
+                    selector.EntitySelectorConfig(
+                        domain=["sensor"], device_class="temperature"
+                    )
+                ),
+                vol.Required(
+                    const.CONF_ELECTRICITY_PRICE_SENSOR,
+                ): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain=["sensor"])
+                ),
+            }
+        )
+
+        return self.async_show_form(step_id="user", data_schema=schema)
 
     def is_matching(self, other_flow) -> bool:
         return True
 
 
-class OptionsFlowHandler(config_entries.OptionsFlow):
+class OptionsFlowHandler(OptionsFlow):
     def __init__(self, entry: config_entries.ConfigEntry):
         self._entry = entry
 

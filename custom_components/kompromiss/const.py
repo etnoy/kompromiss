@@ -1,5 +1,7 @@
+from homeassistant.const import Platform
+
 DOMAIN = "kompromiss"
-PLATFORMS: list[str] = ["sensor"]
+PLATFORMS: list[Platform] = [Platform.SENSOR]
 
 CONF_TEMPERATURE_SENSOR = "temperature_sensor"
 CONF_ELECTRICITY_PRICE_SENSOR = "electricity_price_sensor"
