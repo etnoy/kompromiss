@@ -7,8 +7,13 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 
-from . import const
 from .device import ensure_device
+
+from .const import (
+    DEFAULT_MINIMUM_INDOOR_TEMPERATURE,
+    DEFAULT_MAXIMUM_INDOOR_TEMPERATURE,
+    DOMAIN,
+)
 
 
 STORAGE_KEY = "kompromiss_indoor_temperatures"
@@ -39,26 +44,23 @@ class MinimumIndoorTemperatureNumber(NumberEntity):
     _attr_native_step = 0.1
 
     def __init__(self, hass: HomeAssistant, config_entry: ConfigEntry, device_id: str):
-        """Initialize the number entity."""
         self._hass = hass
         self._config_entry = config_entry
         self._device_id = device_id
         self._store = Store(hass, STORAGE_VERSION, STORAGE_KEY)
-        self._value = const.DEFAULT_MINIMUM_INDOOR_TEMPERATURE
+        self._value = DEFAULT_MINIMUM_INDOOR_TEMPERATURE
 
     @property
     def device_info(self):
-        """Return device info to link entity to device."""
-        return {"identifiers": {(const.DOMAIN, self._config_entry.entry_id)}}
+        return {"identifiers": {(DOMAIN, self._config_entry.entry_id)}}
 
     async def async_added_to_hass(self) -> None:
-        """Load value from storage when added to hass."""
         await super().async_added_to_hass()
         data = await self._store.async_load()
         if data and "minimum" in data:
             self._value = data["minimum"]
         else:
-            self._value = const.DEFAULT_MINIMUM_INDOOR_TEMPERATURE
+            self._value = DEFAULT_MINIMUM_INDOOR_TEMPERATURE
         self.async_write_ha_state()
 
     @property
@@ -89,16 +91,15 @@ class MaximumIndoorTemperatureNumber(NumberEntity):
     _attr_native_step = 0.1
 
     def __init__(self, hass: HomeAssistant, config_entry: ConfigEntry, device_id: str):
-        """Initialize the number entity."""
         self._hass = hass
         self._config_entry = config_entry
         self._device_id = device_id
         self._store = Store(hass, STORAGE_VERSION, STORAGE_KEY)
-        self._value = const.DEFAULT_MAXIMUM_INDOOR_TEMPERATURE
+        self._value = DEFAULT_MAXIMUM_INDOOR_TEMPERATURE
 
     @property
     def device_info(self):
-        return {"identifiers": {(const.DOMAIN, self._config_entry.entry_id)}}
+        return {"identifiers": {(DOMAIN, self._config_entry.entry_id)}}
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
@@ -106,7 +107,7 @@ class MaximumIndoorTemperatureNumber(NumberEntity):
         if data and "maximum" in data:
             self._value = data["maximum"]
         else:
-            self._value = const.DEFAULT_MAXIMUM_INDOOR_TEMPERATURE
+            self._value = DEFAULT_MAXIMUM_INDOOR_TEMPERATURE
         self.async_write_ha_state()
 
     @property

@@ -6,9 +6,15 @@ from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
-from . import const
 from .controller import SimulatedOutdoorTemperatureController
 from .device import ensure_device
+
+from .const import (
+    DOMAIN,
+    CONF_ACTUAL_OUTDOOR_TEMPERATURE_SENSOR,
+    CONF_INDOOR_TEMPERATURE_SENSOR,
+    CONF_ELECTRICITY_PRICE_SENSOR,
+)
 
 
 async def async_setup_entry(
@@ -42,7 +48,7 @@ class SimulatedOutdoorTemperatureSensor(SensorEntity):
 
     @property
     def device_info(self):
-        return {"identifiers": {(const.DOMAIN, self._config_entry.entry_id)}}
+        return {"identifiers": {(DOMAIN, self._config_entry.entry_id)}}
 
     @property
     def native_value(self) -> float | None:
@@ -50,9 +56,7 @@ class SimulatedOutdoorTemperatureSensor(SensorEntity):
         if not hass:
             return None
 
-        entity_id = self._config_entry.data.get(
-            const.CONF_ACTUAL_OUTDOOR_TEMPERATURE_SENSOR
-        )
+        entity_id = self._config_entry.data.get(CONF_ACTUAL_OUTDOOR_TEMPERATURE_SENSOR)
 
         if not entity_id:
             return None
@@ -82,7 +86,7 @@ class ActualOutdoorTemperatureSensor(SensorEntity):
 
     @property
     def device_info(self):
-        return {"identifiers": {(const.DOMAIN, self._config_entry.entry_id)}}
+        return {"identifiers": {(DOMAIN, self._config_entry.entry_id)}}
 
     @property
     def native_value(self) -> float | None:
@@ -90,9 +94,7 @@ class ActualOutdoorTemperatureSensor(SensorEntity):
         if not hass:
             return None
 
-        entity_id = self._config_entry.data.get(
-            const.CONF_ACTUAL_OUTDOOR_TEMPERATURE_SENSOR
-        )
+        entity_id = self._config_entry.data.get(CONF_ACTUAL_OUTDOOR_TEMPERATURE_SENSOR)
 
         if not entity_id:
             return None
@@ -126,7 +128,7 @@ class IndoorTemperatureSensor(SensorEntity):
 
     @property
     def device_info(self):
-        return {"identifiers": {(const.DOMAIN, self._config_entry.entry_id)}}
+        return {"identifiers": {(DOMAIN, self._config_entry.entry_id)}}
 
     @property
     def native_value(self) -> float | None:
@@ -134,7 +136,7 @@ class IndoorTemperatureSensor(SensorEntity):
         if not hass:
             return None
 
-        entity_id = self._config_entry.data.get(const.CONF_INDOOR_TEMPERATURE_SENSOR)
+        entity_id = self._config_entry.data.get(CONF_INDOOR_TEMPERATURE_SENSOR)
         if not entity_id:
             return None
 
@@ -167,7 +169,7 @@ class TemperatureOffsetSensor(SensorEntity):
 
     @property
     def device_info(self):
-        return {"identifiers": {(const.DOMAIN, self._config_entry.entry_id)}}
+        return {"identifiers": {(DOMAIN, self._config_entry.entry_id)}}
 
     @property
     def native_value(self) -> float:
@@ -191,7 +193,7 @@ class ElectricityPriceSensor(SensorEntity):
 
     @property
     def device_info(self):
-        return {"identifiers": {(const.DOMAIN, self._config_entry.entry_id)}}
+        return {"identifiers": {(DOMAIN, self._config_entry.entry_id)}}
 
     @property
     def native_value(self) -> float | None:
@@ -199,9 +201,7 @@ class ElectricityPriceSensor(SensorEntity):
         if not hass:
             return None
 
-        entity_id = self._config_entry.data.get(
-            const.CONF_ELECTRICITY_PRICE_SENSOR
-        )
+        entity_id = self._config_entry.data.get(CONF_ELECTRICITY_PRICE_SENSOR)
 
         if not entity_id:
             return None
@@ -218,4 +218,3 @@ class ElectricityPriceSensor(SensorEntity):
     @property
     def translation_key(self) -> str:
         return "electricity_price"
-
