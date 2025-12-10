@@ -3,7 +3,8 @@ from homeassistant.const import Platform
 DOMAIN = "kompromiss"
 PLATFORMS: list[Platform] = [Platform.SENSOR]
 
-CONF_TEMPERATURE_SENSOR = "temperature_sensor"
+CONF_ACTUAL_OUTDOOR_TEMPERATURE_SENSOR = "actual_outdoor_temperature_sensor"
+CONF_INDOOR_TEMPERATURE_SENSOR = "indoor_temperature_sensor"
 CONF_ELECTRICITY_PRICE_SENSOR = "electricity_price_sensor"
 
 CONF_MINIMUM_INDOOR_TEMPERATURE = "minimum_indoor_temperature"
