@@ -1,5 +1,4 @@
-# kompromiss
-Heat Pump Optimizer
+**kompromiss** *(noun)* - the Swedish word for compromise and similar to **kompressor**, the Swedish word for compressor that drives our heat pumps
 
 ---
 
@@ -7,10 +6,8 @@ Heat Pump Optimizer
 
 This tool is used at your own risk. An incorrect setup can lead to damage to your heat pump or house.
 
----
-
 # Prerequisites
-* Hardware, such as Ohmigo Plus
+* Hardware, such as ohmonwifiplus
 * Nordpool integration (Official, not from HACS)
 * Outdoor temperature sensor available in HA
 * Indoor temperature sensor available in HA
