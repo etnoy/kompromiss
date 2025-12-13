@@ -29,12 +29,13 @@ async def async_setup_entry(
     hass: HomeAssistant, config_entry: ConfigEntry, async_add_entities
 ):
     device = ensure_device(hass, config_entry)
+    controller = hass.data[DOMAIN][config_entry.entry_id]
 
     sensors = [
-        SimulatedOutdoorTemperatureSensor(config_entry, device.id),
+        SimulatedOutdoorTemperatureSensor(config_entry, device.id, controller),
         ActualOutdoorTemperatureSensor(config_entry, device.id),
         IndoorTemperatureSensor(config_entry, device.id),
-        TemperatureOffsetSensor(config_entry, device.id),
+        TemperatureOffsetSensor(config_entry, device.id, controller),
         ElectricityPriceSensor(config_entry, device.id),
     ]
     async_add_entities(sensors)
@@ -50,38 +51,28 @@ class SimulatedOutdoorTemperatureSensor(SensorEntity):
     _attr_name = "Simulated Outdoor Temperature"
     _attr_unique_id = "kompromiss_simulated_outdoor_temperature"
 
-    def __init__(self, config_entry: ConfigEntry, device_id: str):
+    def __init__(
+        self,
+        config_entry: ConfigEntry,
+        device_id: str,
+        controller: SimulatedOutdoorTemperatureController,
+    ):
         self._config_entry = config_entry
         self._device_id = device_id
-        self._entity_id = self._config_entry.data.get(
-            CONF_ACTUAL_OUTDOOR_TEMPERATURE_SENSOR
-        )
-        self._controller: SimulatedOutdoorTemperatureController | None = None
-        self._temperature: float | None = None
+        self._controller = controller
 
     async def async_added_to_hass(self):
-        self._controller = SimulatedOutdoorTemperatureController(
-            self.hass, self._entity_id
-        )
-        self._controller.async_subscribe()
         self._controller.async_subscribe_sensor(self._on_temperature_update)
         return await super().async_added_to_hass()
 
     async def async_will_remove_from_hass(self):
         """Clean up when entity is removed."""
-        if self._controller:
-            self._controller.async_unsubscribe_sensor(self._on_temperature_update)
-            self._controller.async_unsubscribe()
+        self._controller.async_unsubscribe_sensor(self._on_temperature_update)
         return await super().async_will_remove_from_hass()
 
-    def _on_temperature_update(self, temperature: float | None) -> None:
+    def _on_temperature_update(self, _temperature: float | None) -> None:
         """Callback when controller state changes."""
-        self._temperature = temperature
-        self.async_write_ha_state()
-
-    def set_native_value(self, value: float) -> None:
-        """Set the native value of the sensor."""
-        self._temperature = value
+        self.schedule_update_ha_state()
 
     @property
     def device_info(self):
@@ -89,7 +80,7 @@ class SimulatedOutdoorTemperatureSensor(SensorEntity):
 
     @property
     def native_value(self) -> float | None:
-        return self._temperature
+        return self._controller.get_simulated_temperature()
 
     @property
     def translation_key(self) -> str:
@@ -188,17 +179,36 @@ class TemperatureOffsetSensor(SensorEntity):
     _attr_name = "Temperature Offset"
     _attr_unique_id = "kompromiss_temperature_offset"
 
-    def __init__(self, config_entry: ConfigEntry, device_id: str):
+    def __init__(
+        self,
+        config_entry: ConfigEntry,
+        device_id: str,
+        controller: SimulatedOutdoorTemperatureController,
+    ):
         self._config_entry = config_entry
         self._device_id = device_id
+        self._controller = controller
+
+    async def async_added_to_hass(self):
+        self._controller.async_subscribe_sensor(self._on_temperature_update)
+        return await super().async_added_to_hass()
+
+    async def async_will_remove_from_hass(self):
+        """Clean up when entity is removed."""
+        self._controller.async_unsubscribe_sensor(self._on_temperature_update)
+        return await super().async_will_remove_from_hass()
+
+    def _on_temperature_update(self, _temperature: float | None) -> None:
+        """Callback when controller state changes."""
+        self.schedule_update_ha_state()
 
     @property
     def device_info(self):
         return {"identifiers": {(DOMAIN, self._config_entry.entry_id)}}
 
     @property
-    def native_value(self) -> float:
-        return SimulatedOutdoorTemperatureController.TEMPERATURE_OFFSET
+    def native_value(self) -> float | None:
+        return self._controller.get_temperature_offset()
 
     @property
     def translation_key(self) -> str:
