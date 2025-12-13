@@ -57,17 +57,31 @@ class SimulatedOutdoorTemperatureSensor(SensorEntity):
             CONF_ACTUAL_OUTDOOR_TEMPERATURE_SENSOR
         )
         self._controller: SimulatedOutdoorTemperatureController | None = None
+        self._temperature: float | None = None
 
     async def async_added_to_hass(self):
         self._controller = SimulatedOutdoorTemperatureController(
             self.hass, self._entity_id
         )
+        self._controller.async_subscribe()
+        self._controller.async_subscribe_sensor(self._on_temperature_update)
+        return await super().async_added_to_hass()
 
-        _LOGGER.debug(
-            "Added simulated outdoor temperature sensor for entity %s", self._entity_id
-        )
+    async def async_will_remove_from_hass(self):
+        """Clean up when entity is removed."""
+        if self._controller:
+            self._controller.async_unsubscribe_sensor(self._on_temperature_update)
+            self._controller.async_unsubscribe()
+        return await super().async_will_remove_from_hass()
 
-        return super().async_added_to_hass()
+    def _on_temperature_update(self, temperature: float | None) -> None:
+        """Callback when controller state changes."""
+        self._temperature = temperature
+        self.async_write_ha_state()
+
+    def set_native_value(self, value: float) -> None:
+        """Set the native value of the sensor."""
+        self._temperature = value
 
     @property
     def device_info(self):
@@ -75,7 +89,7 @@ class SimulatedOutdoorTemperatureSensor(SensorEntity):
 
     @property
     def native_value(self) -> float | None:
-        return self._controller.get_simulated_temperature()
+        return self._temperature
 
     @property
     def translation_key(self) -> str:
