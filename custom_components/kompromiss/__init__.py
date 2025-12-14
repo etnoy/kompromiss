@@ -14,7 +14,6 @@ from .controller import TemperatureController
 async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
 
-    # Create controller singleton for this config entry
     actual_temp_entity_id = config_entry.data.get(
         CONF_ACTUAL_OUTDOOR_TEMPERATURE_SENSOR
     )

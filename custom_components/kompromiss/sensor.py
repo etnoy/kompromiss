@@ -17,7 +17,6 @@ from .device import ensure_device
 
 from .const import (
     DOMAIN,
-    CONF_SIMULATED_OUTDOOR_TEMPERATURE_SENSOR,
     CONF_ACTUAL_OUTDOOR_TEMPERATURE_SENSOR,
     CONF_INDOOR_TEMPERATURE_SENSOR,
     CONF_ELECTRICITY_PRICE_SENSOR,
@@ -64,16 +63,24 @@ class SimulatedOutdoorTemperatureSensor(SensorEntity):
         self._temperature = None
 
     async def async_added_to_hass(self):
+        _LOGGER.debug(
+            "Simulated outdoor temperature sensor subscribing to controller updates"
+        )
         self._controller.async_subscribe_sensor(self._on_temperature_update)
         return await super().async_added_to_hass()
 
     async def async_will_remove_from_hass(self):
         """Clean up when entity is removed."""
+        _LOGGER.debug(
+            "Simulated outdoor temperature sensor unsubscribing from controller updates"
+        )
+
         self._controller.async_unsubscribe_sensor(self._on_temperature_update)
         return await super().async_will_remove_from_hass()
 
     def _on_temperature_update(self, state: ControllerState) -> None:
         """Callback when controller state changes."""
+        _LOGGER.debug("Simulated outdoor temperature sensor received update: %s", state)
         self._temperature = state.simulated_temperature
         self.schedule_update_ha_state()
 
@@ -83,7 +90,7 @@ class SimulatedOutdoorTemperatureSensor(SensorEntity):
 
     @property
     def native_value(self) -> float | None:
-        return self._controller.get_simulated_temperature()
+        return self._temperature
 
     @property
     def translation_key(self) -> str:
