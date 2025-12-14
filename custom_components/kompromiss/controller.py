@@ -5,26 +5,10 @@ from typing import Callable, Any
 from homeassistant.core import HomeAssistant, Event, EventStateChangedData
 from homeassistant.helpers.event import async_track_state_change_event
 
+from .state import ControllerState
 
-from .regulator.passthrough import PassthroughRegulator
 
-
-class ControllerState:
-    """Holds the current state of the controller."""
-
-    def __init__(self):
-        self.simulated_outdoor_temperature: float | None = None
-        self.actual_outdoor_temperature: float | None = None
-        self.indoor_temperature: float | None = None
-        self.offset: float | None = None
-
-    def is_valid(self) -> bool:
-        """Check if the state has valid temperature readings."""
-        return (
-            self.simulated_outdoor_temperature is not None
-            and self.actual_outdoor_temperature is not None
-            and self.indoor_temperature is not None
-        )
+from .regulator.mpc import MPCRegulator
 
 
 class TemperatureController:
@@ -41,7 +25,7 @@ class TemperatureController:
         self._actual_outdoor_temperature_entity_id = actual_temperature_entity_id
         self._simulated_outdoor_temperature_entity_id = simulated_temperature_entity_id
         self._indoor_temperature_entity_id = indoor_temperature_entity_id
-        self._regulator = PassthroughRegulator()
+        self._regulator = MPCRegulator()
         self._unsub = None
         self._subscribers: list[Callable[[float | None], Any]] = []
         self._state = ControllerState()
@@ -109,7 +93,7 @@ class TemperatureController:
         elif entity_id == self._indoor_temperature_entity_id:
             self._state.indoor_temperature = value
 
-        await self._regulator.set_state(self._state.actual_outdoor_temperature)
+        await self._regulator.set_state(self._state)
         await self._regulator.async_regulate()
         self._state.simulated_outdoor_temperature = await self._regulator.get_output()
         self._state.offset = self._compute_temperature_offset()
