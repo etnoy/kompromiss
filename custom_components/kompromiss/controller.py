@@ -100,7 +100,7 @@ class TemperatureController:
         elif entity_id == self._indoor_temperature_entity_id:
             self._state.indoor_temperature = value
 
-        await self._regulator.set_state(new_state)
+        await self._regulator.set_state(self._state.actual_outdoor_temperature)
         await self._regulator.async_regulate()
         self._state.simulated_temperature = await self._regulator.get_output()
         self._state.offset = self._compute_temperature_offset()
