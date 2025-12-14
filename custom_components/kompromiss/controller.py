@@ -13,10 +13,18 @@ class ControllerState:
     """Holds the current state of the controller."""
 
     def __init__(self):
-        self.simulated_temperature: float | None = None
+        self.simulated_outdoor_temperature: float | None = None
         self.actual_outdoor_temperature: float | None = None
         self.indoor_temperature: float | None = None
         self.offset: float | None = None
+
+    def is_valid(self) -> bool:
+        """Check if the state has valid temperature readings."""
+        return (
+            self.simulated_outdoor_temperature is not None
+            and self.actual_outdoor_temperature is not None
+            and self.indoor_temperature is not None
+        )
 
 
 class TemperatureController:
@@ -56,12 +64,13 @@ class TemperatureController:
     def _compute_temperature_offset(self) -> float | None:
         """Get the current temperature offset (simulated - actual)."""
         if (
-            self._state.simulated_temperature is None
+            self._state.simulated_outdoor_temperature is None
             or self._state.actual_outdoor_temperature is None
         ):
             return None
         return (
-            self._state.simulated_temperature - self._state.actual_outdoor_temperature
+            self._state.simulated_outdoor_temperature
+            - self._state.actual_outdoor_temperature
         )
 
     def async_subscribe(self) -> None:
@@ -102,7 +111,7 @@ class TemperatureController:
 
         await self._regulator.set_state(self._state.actual_outdoor_temperature)
         await self._regulator.async_regulate()
-        self._state.simulated_temperature = await self._regulator.get_output()
+        self._state.simulated_outdoor_temperature = await self._regulator.get_output()
         self._state.offset = self._compute_temperature_offset()
 
         await self._notify_subscribers()

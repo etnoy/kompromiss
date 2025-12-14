@@ -81,7 +81,7 @@ class SimulatedOutdoorTemperatureSensor(SensorEntity):
     def _on_temperature_update(self, state: ControllerState) -> None:
         """Callback when controller state changes."""
         _LOGGER.debug("Simulated outdoor temperature sensor received update: %s", state)
-        self._temperature = state.simulated_temperature
+        self._temperature = state.simulated_outdoor_temperature
         self.schedule_update_ha_state()
 
     @property
