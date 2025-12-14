@@ -6,7 +6,7 @@ score = false
 
 [tool.pylint.reports]
 output-format = "colorized"
-disable = ["R0903","C0114", "C0115", "C0116","W0223", "W0511"]
+disable = ["R0903","C0114", "C0115", "C0116","W0223", "W0511","R0902"]
 
 [tool.ruff]
 line-length = 88

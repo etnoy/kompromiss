@@ -17,7 +17,7 @@ class PassthroughRegulator(Regulator):
         self._output: float | None = None
         super().__init__()
 
-    async def set_state(self, state: float) -> None:
+    async def set_state(self, state: float | None) -> None:
         self._state = state
 
     async def get_output(self) -> float | None:
@@ -27,7 +27,5 @@ class PassthroughRegulator(Regulator):
         if self._state is None:
             self._output = None
 
-        try:
-            self._state = float(self._state)
-        except (ValueError, TypeError):
-            self._state = None
+        # This is a passthrough regulator, so output equals input
+        self._output = self._state

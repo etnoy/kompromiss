@@ -12,11 +12,12 @@ from homeassistant.components.sensor import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
-from .controller import SimulatedOutdoorTemperatureController
+from .controller import ControllerState, TemperatureController
 from .device import ensure_device
 
 from .const import (
     DOMAIN,
+    CONF_SIMULATED_OUTDOOR_TEMPERATURE_SENSOR,
     CONF_ACTUAL_OUTDOOR_TEMPERATURE_SENSOR,
     CONF_INDOOR_TEMPERATURE_SENSOR,
     CONF_ELECTRICITY_PRICE_SENSOR,
@@ -55,11 +56,12 @@ class SimulatedOutdoorTemperatureSensor(SensorEntity):
         self,
         config_entry: ConfigEntry,
         device_id: str,
-        controller: SimulatedOutdoorTemperatureController,
+        controller: TemperatureController,
     ):
         self._config_entry = config_entry
         self._device_id = device_id
         self._controller = controller
+        self._temperature = None
 
     async def async_added_to_hass(self):
         self._controller.async_subscribe_sensor(self._on_temperature_update)
@@ -70,8 +72,9 @@ class SimulatedOutdoorTemperatureSensor(SensorEntity):
         self._controller.async_unsubscribe_sensor(self._on_temperature_update)
         return await super().async_will_remove_from_hass()
 
-    def _on_temperature_update(self, _temperature: float | None) -> None:
+    def _on_temperature_update(self, state: ControllerState) -> None:
         """Callback when controller state changes."""
+        self._temperature = state.simulated_temperature
         self.schedule_update_ha_state()
 
     @property
@@ -183,11 +186,12 @@ class TemperatureOffsetSensor(SensorEntity):
         self,
         config_entry: ConfigEntry,
         device_id: str,
-        controller: SimulatedOutdoorTemperatureController,
+        controller: TemperatureController,
     ):
         self._config_entry = config_entry
         self._device_id = device_id
         self._controller = controller
+        self._offset: float | None = None
 
     async def async_added_to_hass(self):
         self._controller.async_subscribe_sensor(self._on_temperature_update)
@@ -198,8 +202,10 @@ class TemperatureOffsetSensor(SensorEntity):
         self._controller.async_unsubscribe_sensor(self._on_temperature_update)
         return await super().async_will_remove_from_hass()
 
-    def _on_temperature_update(self, _temperature: float | None) -> None:
+    def _on_temperature_update(self, state: ControllerState) -> None:
         """Callback when controller state changes."""
+        self._offset = state.offset
+
         self.schedule_update_ha_state()
 
     @property
@@ -208,7 +214,7 @@ class TemperatureOffsetSensor(SensorEntity):
 
     @property
     def native_value(self) -> float | None:
-        return self._controller.get_temperature_offset()
+        return self._offset
 
     @property
     def translation_key(self) -> str:

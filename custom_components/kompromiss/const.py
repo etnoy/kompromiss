@@ -4,6 +4,8 @@ DOMAIN = "kompromiss"
 PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.NUMBER]
 
 CONF_ACTUAL_OUTDOOR_TEMPERATURE_SENSOR = "actual_outdoor_temperature_sensor"
+CONF_SIMULATED_OUTDOOR_TEMPERATURE_SENSOR = "simulated_outdoor_temperature_sensor"
+CONF_TEMPERATURE_OFFSET_SENSOR = "temperature_offset_sensor"
 CONF_INDOOR_TEMPERATURE_SENSOR = "indoor_temperature_sensor"
 CONF_ELECTRICITY_PRICE_SENSOR = "electricity_price_sensor"
 
