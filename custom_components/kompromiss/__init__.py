@@ -28,7 +28,8 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
         simulated_temperature_entity_id,
         indoor_temperature_entity_id,
     )
-    controller.async_subscribe()
+
+    await controller.async_subscribe()
     hass.data[DOMAIN][config_entry.entry_id] = controller
 
     await hass.config_entries.async_forward_entry_setups(config_entry, PLATFORMS)

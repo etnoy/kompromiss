@@ -23,6 +23,12 @@
       },
       "maximum_indoor_temperature": {
         "name": "Maximum Indoor Temperature"
+      },
+      "weight_temperature_deviation": {
+        "name": "Weight Temperature Deviation Penalty"
+      },
+      "weight_comfort_band_violation": {
+        "name": "Weight Comfort Band Violation Penalty"
       }
     }
   }

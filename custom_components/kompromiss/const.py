@@ -18,6 +18,14 @@ CONF_ENABLED = "enabled"
 DEFAULT_MINIMUM_INDOOR_TEMPERATURE = 19.5
 DEFAULT_MAXIMUM_INDOOR_TEMPERATURE = 22.5
 DEFAULT_LOWEST_SIMULATED_TEMPERATURE = -40.0
+
+# Signals for MPC parameter changes
+SIGNAL_MPC_WEIGHT_TEMP_DEVIATION_CHANGED = (
+    "kompromiss_mpc_weight_temp_deviation_changed"
+)
+SIGNAL_MPC_WEIGHT_COMFORT_VIOLATION_CHANGED = (
+    "kompromiss_mpc_weight_comfort_violation_changed"
+)
 # 20 degrees is often where summer mode kicks in, so let's put 19 as the max
 DEFAULT_HIGHEST_SIMULATED_TEMPERATURE = 19.0
 # Electricity price usually updates every 15 minutes, so align with that

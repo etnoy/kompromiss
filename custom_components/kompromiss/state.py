@@ -1,3 +1,6 @@
+from .electricity import ElectricityPriceData
+
+
 class ControllerState:
     """Holds the current state of the controller."""
 
@@ -6,11 +9,11 @@ class ControllerState:
         self.actual_outdoor_temperature: float | None = None
         self.indoor_temperature: float | None = None
         self.offset: float | None = None
+        self.price_data: list[ElectricityPriceData] = []
 
     def is_valid(self) -> bool:
         """Check if the state has valid temperature readings."""
         return (
-            self.simulated_outdoor_temperature is not None
-            and self.actual_outdoor_temperature is not None
+            self.actual_outdoor_temperature is not None
             and self.indoor_temperature is not None
         )

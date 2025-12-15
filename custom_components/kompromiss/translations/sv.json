@@ -23,6 +23,12 @@
       },
       "maximum_indoor_temperature": {
         "name": "Högsta tillåtna innetemperatur"
+      },
+      "weight_temperature_deviation": {
+        "name": "Vikt temperaturavvikelse"
+      },
+      "weight_comfort_band_violation": {
+        "name": "Vikt komfortgränsöverträdelse"
       }
     }
   }

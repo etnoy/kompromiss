@@ -1,12 +1,17 @@
-"""Model Predictive Control regulator for temperature control using 1R1C thermal model."""
+"""Model Predictive Control regulator for temperature control using 1R1C thermal model.
+
+Refactored to use CasADi with the IPOPT solver for the MPC optimization problem.
+"""
 
 from __future__ import annotations
 
 import logging
 import math
+import time
 from typing import Final
 
 import numpy as np
+import casadi as ca
 
 from . import Regulator
 from ..state import ControllerState
@@ -23,8 +28,9 @@ class MPCParameters:
 
     HEAT_PUMP_THERMAL_POWER: float = 5000.0  # Maximum heat output [W]
 
-    TARGET_TEMP_MIN: float = 19.5  # Minimum desired indoor temperature [°C]
-    TARGET_TEMP_MAX: float = 22.5  # Maximum desired indoor temperature [°C]
+    TARGET_TEMPERATURE: float = 21.0  # Desired indoor temperature [°C]
+    TARGET_TEMPERATURE_FLOOR: float = 19.5  # Minimum comfort bound [°C]
+    TARGET_TEMPERATURE_CEILING: float = 22.5  # Maximum comfort bound [°C]
 
     PREDICTION_HORIZON: int = 12 * 4  # Number of steps to predict ahead
     TIME_STEP: float = 900.0  # Time step in seconds (15 minutes)
@@ -33,7 +39,10 @@ class MPCParameters:
     WEIGHT_TEMPERATURE_DEVIATION: float = (
         1000.0  # Cost for being far from temperature target
     )
-    WEIGHT_HEAT_INPUT: float = 0.1  # Cost for using energy
+    WEIGHT_COMFORT_BAND_VIOLATION: float = (
+        10000.0  # Cost for violating comfort band (floor/ceiling)
+    )
+    WEIGHT_HEAT_INPUT: float = 25  # Cost for using energy
 
 
 class MPCRegulator(Regulator):
@@ -81,203 +90,175 @@ class MPCRegulator(Regulator):
             return None
         return self._state.simulated_temperature
 
-    def _predict_indoor_temperature(
-        self,
-        heat_input: float | np.ndarray,
-    ) -> np.ndarray:
-        """Predict future indoor temperature using 1R1C model.
+    def set_weight_temperature_deviation(self, value: float) -> None:
+        """Update the weight for temperature deviation from target.
 
         Args:
-            heat_input: Heat power input [W] - scalar or array of length horizon
-            steps: Number of time steps to predict (if heat_input is scalar)
-
-        Returns:
-            Array of predicted indoor temperatures at each time step [k=0, k=1, ..., k=steps]
+            value: New weight value for temperature deviation cost
         """
-        if isinstance(heat_input, (int, float)):
-            # Scalar heat input - repeat for all steps
-            heat_inputs = np.full(self._parameters.PREDICTION_HORIZON, heat_input)
-        else:
-            # Array heat input
-            heat_inputs = np.asarray(heat_input)
-            if len(heat_inputs) < self._parameters.PREDICTION_HORIZON:
-                # Pad with last value if shorter than horizon
-                heat_inputs = np.pad(
-                    heat_inputs,
-                    (0, self._parameters.PREDICTION_HORIZON - len(heat_inputs)),
-                    "edge",
-                )
+        self._parameters.WEIGHT_TEMPERATURE_DEVIATION = value
 
-        # Initialize temperature trajectory, initial value is current indoor temp
-        temperature_trajectory = np.zeros(self._parameters.PREDICTION_HORIZON + 1)
-        temperature_trajectory[0] = self._state.indoor_temperature
+        _LOGGER.debug("MPC weight for temperature deviation updated to %.2f", value)
 
-        # Predict forward in time
-        for k in range(self._parameters.PREDICTION_HORIZON):
-            temperature_trajectory[k + 1] = (
-                self._system_matrix_a * temperature_trajectory[k]
-                + self._system_matrix_b * heat_inputs[k]
-                + (1.0 - self._system_matrix_a) * self._state.actual_outdoor_temperature
-            )
-
-        _LOGGER.debug(
-            "Computed temperature trajectory: %s for heat input %s",
-            temperature_trajectory,
-            heat_inputs,
-        )
-
-        return temperature_trajectory
-
-    def _calculate_total_cost_horizon(
-        self,
-        heat_inputs: np.ndarray,
-    ) -> float:
-        """Calculate total cost over prediction horizon.
+    def set_weight_comfort_band_violation(self, value: float) -> None:
+        """Update the weight for comfort band violations.
 
         Args:
-            initial_temp: Current indoor temperature
-            outdoor_temp: Outdoor temperature
-            heat_inputs: Array of heat inputs for each step in horizon
-
-        Returns:
-            Total accumulated cost
+            value: New weight value for comfort band violation cost
         """
-        temperature_trajectory = self._predict_indoor_temperature(heat_inputs)
+        self._parameters.WEIGHT_COMFORT_BAND_VIOLATION = value
 
-        total_cost = 0.0
-
-        for k in range(0, self._parameters.PREDICTION_HORIZON):
-            temperature = temperature_trajectory[k]
-
-            deviation = 0.0
-
-            # Cost for deviation from target temperature range
-            if temperature < self._parameters.TARGET_TEMP_MIN:
-                deviation = self._parameters.TARGET_TEMP_MIN - temperature
-            elif temperature > self._parameters.TARGET_TEMP_MAX:
-                deviation = temperature - self._parameters.TARGET_TEMP_MAX
-
-            cost_deviation = self._parameters.WEIGHT_TEMPERATURE_DEVIATION * (
-                deviation**2
-            )
-
-            # Cost for heat input (energy usage)
-            heat_input = heat_inputs[k]
-            cost_heat = self._parameters.WEIGHT_HEAT_INPUT * (heat_input)
-
-            total_cost += cost_deviation + cost_heat
-
-        _LOGGER.debug(
-            "Calculated total cost %.2f for heat inputs %s", total_cost, heat_inputs
-        )
-
-        return total_cost
+        _LOGGER.debug("MPC weight for comfort band violation updated to %.2f", value)
 
     def _optimize_heat_input(
         self,
         initial_temp: float,
-    ) -> np.ndarray:
-        """Find optimal heat input sequence over prediction horizon using gradient descent.
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Solve MPC using CasADi IPOPT.
 
         Args:
             initial_temp: Current indoor temperature
 
         Returns:
-            Array of optimal heat inputs for each step in horizon
+            Tuple of (optimal heat inputs, optimal temperature trajectory)
         """
 
-        _LOGGER.debug(
-            "Starting heat input optimization from initial temp %.2f°C", initial_temp
-        )
+        # Decision variables
+        heat_input_variable = ca.SX.sym("u", self._parameters.PREDICTION_HORIZON)
+        temperature_state = ca.SX.sym("x", self._parameters.PREDICTION_HORIZON + 1)
+        slack_lower = ca.SX.sym("sL", self._parameters.PREDICTION_HORIZON)
+        slack_upper = ca.SX.sym("sH", self._parameters.PREDICTION_HORIZON)
 
-        # Initialize with simple proportional control
-        target_temp = (
-            self._parameters.TARGET_TEMP_MIN + self._parameters.TARGET_TEMP_MAX
-        ) / 2.0
-        heat_inputs = np.full(
-            self._parameters.PREDICTION_HORIZON,
-            max(
-                0,
-                min(
-                    self._parameters.HEAT_PUMP_THERMAL_POWER,
-                    (initial_temp - target_temp) * 1000.0,
-                ),
-            ),
-        )
-
-        total_cost = self._calculate_total_cost_horizon(heat_inputs)
-
-        # Gradient descent optimization with adaptive step length
-        step_size = 500.0
-        min_step_size = 50.0
-        growth_factor = 1.2
-        shrink_factor = 0.5
-        max_iterations = 40
-
-        for iteration in range(max_iterations):
-            current_total_cost = total_cost
-
-            _LOGGER.debug(
-                "Optimization iteration %d: cost %.2f, step_size %.1f, heat inputs %s",
-                iteration,
-                current_total_cost,
-                step_size,
-                heat_inputs,
+        # Objective
+        objective = 0
+        for step in range(self._parameters.PREDICTION_HORIZON):
+            # Penalize deviation from target temperature
+            temperature_error = (
+                temperature_state[step] - self._parameters.TARGET_TEMPERATURE
+            )
+            energy_cost = (
+                heat_input_variable[step]
+                / 1000
+                * self._state.electricity_prices[step].price
+                / 4
+            )
+            objective = (
+                objective
+                + self._parameters.WEIGHT_TEMPERATURE_DEVIATION * (temperature_error**2)
+                + self._parameters.WEIGHT_COMFORT_BAND_VIOLATION
+                * (slack_lower[step] ** 2 + slack_upper[step] ** 2)
+                + self._parameters.WEIGHT_HEAT_INPUT * energy_cost
             )
 
-            improved = False
+        # Constraints
+        constraints = []
+        constraints_lower = []
+        constraints_upper = []
 
-            for i, _ in enumerate(heat_inputs):
-                # Try increasing heat at step i
-                heat_inputs_plus = heat_inputs.copy()
-                heat_inputs_plus[i] = min(
-                    self._parameters.HEAT_PUMP_THERMAL_POWER,
-                    heat_inputs_plus[i] + step_size,
+        # Initial condition
+        constraints.append(temperature_state[0] - initial_temp)
+        constraints_lower.append(0.0)
+        constraints_upper.append(0.0)
+
+        # Dynamics and slack constraints
+        for step in range(self._parameters.PREDICTION_HORIZON):
+            constraints.append(
+                temperature_state[step + 1]
+                - (
+                    self._system_matrix_a * temperature_state[step]
+                    + self._system_matrix_b * heat_input_variable[step]
+                    + (1.0 - self._system_matrix_a)
+                    * self._state.actual_outdoor_temperature
                 )
-                cost_plus = self._calculate_total_cost_horizon(heat_inputs_plus)
+            )
+            constraints_lower.append(0.0)
+            constraints_upper.append(0.0)
 
-                # Try decreasing heat at step i
-                heat_inputs_minus = heat_inputs.copy()
-                heat_inputs_minus[i] = max(0, heat_inputs_minus[i] - step_size)
-                cost_minus = self._calculate_total_cost_horizon(heat_inputs_minus)
+            constraints.append(
+                temperature_state[step]
+                + slack_lower[step]
+                - self._parameters.TARGET_TEMPERATURE_FLOOR
+            )
+            constraints_lower.append(0.0)
+            constraints_upper.append(ca.inf)
 
-                # Update in direction of steepest descent using current step size
-                if cost_plus < current_total_cost and cost_plus <= cost_minus:
-                    heat_inputs[i] = heat_inputs_plus[i]
-                    current_total_cost = cost_plus
-                    improved = True
-                elif cost_minus < current_total_cost:
-                    heat_inputs[i] = heat_inputs_minus[i]
-                    current_total_cost = cost_minus
-                    improved = True
+            constraints.append(
+                -temperature_state[step]
+                + slack_upper[step]
+                + self._parameters.TARGET_TEMPERATURE_CEILING
+            )
+            constraints_lower.append(0.0)
+            constraints_upper.append(ca.inf)
 
-                _LOGGER.debug(
-                    "Gradient step %d: cost_plus %.2f, cost_minus %.2f, baseline_cost %.2f, step_size %.1f, improved: %s",
-                    i,
-                    cost_plus,
-                    cost_minus,
-                    total_cost,
-                    step_size,
-                    improved,
-                )
-
-            if improved:
-                total_cost = current_total_cost
-                step_size = min(
-                    step_size * growth_factor, self._parameters.HEAT_PUMP_THERMAL_POWER
-                )
-            else:
-                step_size = max(step_size * shrink_factor, min_step_size)
-                if step_size <= min_step_size:
-                    break
-
-        _LOGGER.debug(
-            "Optimization completed: optimal heat inputs %s give total cost %.2f",
-            heat_inputs,
-            total_cost,
+        # Variable vector
+        decision_vars = ca.vertcat(
+            heat_input_variable, temperature_state, slack_lower, slack_upper
         )
 
-        return heat_inputs
+        # Bounds
+        decision_lower_bounds = (
+            [0.0] * self._parameters.PREDICTION_HORIZON
+            + [-ca.inf] * (self._parameters.PREDICTION_HORIZON + 1)
+            + [0.0] * self._parameters.PREDICTION_HORIZON
+            + [0.0] * self._parameters.PREDICTION_HORIZON
+        )
+        decision_upper_bounds = (
+            [self._parameters.HEAT_PUMP_THERMAL_POWER]
+            * self._parameters.PREDICTION_HORIZON
+            + [ca.inf] * (self._parameters.PREDICTION_HORIZON + 1)
+            + [ca.inf] * self._parameters.PREDICTION_HORIZON
+            + [ca.inf] * self._parameters.PREDICTION_HORIZON
+        )
+
+        nlp = {"x": decision_vars, "f": objective, "g": ca.vertcat(*constraints)}
+        solver_opts = {
+            "print_time": False,
+            "ipopt": {
+                "print_level": 0,
+                "sb": "yes",
+                "max_iter": 200,
+                "acceptable_tol": 1e-6,
+                "tol": 1e-6,
+            },
+        }
+        solver = ca.nlpsol("solver", "ipopt", nlp, solver_opts)
+
+        # Initial guess
+        temperature_initial_guess = [initial_temp]
+        for _ in range(self._parameters.PREDICTION_HORIZON):
+            temperature_initial_guess.append(
+                float(
+                    self._system_matrix_a * temperature_initial_guess[-1]
+                    + (1.0 - self._system_matrix_a)
+                    * self._state.actual_outdoor_temperature
+                )
+            )
+        heat_initial_guess = [0.0] * self._parameters.PREDICTION_HORIZON
+        slack_initial_guess = [0.0] * self._parameters.PREDICTION_HORIZON
+        initial_guess = (
+            heat_initial_guess
+            + temperature_initial_guess
+            + slack_initial_guess
+            + slack_initial_guess
+        )
+
+        solution = solver(
+            x0=ca.DM(initial_guess),
+            lbg=ca.DM(constraints_lower),
+            ubg=ca.DM(constraints_upper),
+            lbx=ca.DM(decision_lower_bounds),
+            ubx=ca.DM(decision_upper_bounds),
+        )
+
+        solution_vector = np.array(solution["x"]).flatten()
+        optimal_heat_inputs = solution_vector[: self._parameters.PREDICTION_HORIZON]
+
+        # Extract temperature trajectory
+        temp_start = self._parameters.PREDICTION_HORIZON
+        temp_end = temp_start + self._parameters.PREDICTION_HORIZON + 1
+        optimal_temperatures = solution_vector[temp_start:temp_end]
+
+        return optimal_heat_inputs.astype(float), optimal_temperatures.astype(float)
 
     async def async_regulate(self) -> float:
         """Run MPC to compute optimal simulated outdoor temperature.
@@ -295,8 +276,24 @@ class MPCRegulator(Regulator):
                 )
             return self._state.simulated_temperature if self._state else None
 
+        if self._state.electricity_prices is None:
+            raise RuntimeError("No electricity price data available for MPC regulation")
+
+        if len(self._state.electricity_prices) < self._parameters.PREDICTION_HORIZON:
+            available = len(self._state.electricity_prices)
+            required = self._parameters.PREDICTION_HORIZON
+            raise RuntimeError(
+                f"Insufficient electricity price data for MPC regulation. \n"
+                f"Only {available} points available, but {required} required."
+            )
+
+        _LOGGER.debug("Electricity prices for MPC: %s", self._state.electricity_prices)
+        for electricity_price in self._state.electricity_prices:
+            _LOGGER.debug("Electricity price: %s", electricity_price)
+
         # Optimize heat input over prediction horizon
-        optimal_heat_inputs = self._optimize_heat_input(
+        start_time = time.perf_counter()
+        optimal_heat_inputs, optimal_temperatures = self._optimize_heat_input(
             self._state.indoor_temperature,
         )
 
@@ -339,13 +336,20 @@ class MPCRegulator(Regulator):
             self.MINIMUM_SIMULATED_TEMPERATURE,
             min(self.MAXIMUM_SIMULATED_TEMPERATURE, self._state.simulated_temperature),
         )
+        computation_time = time.perf_counter() - start_time
 
         _LOGGER.debug(
-            "MPC regulation computed simulated outdoor temperature: %.2f°C. "
-            "Predicted indoor temp trajectory: %s, heat inputs: %s",
+            "MPC regulation computed simulated outdoor temperature: %.2f°C in %.0fms.\n"
+            "Weights: temp_dev=%.0f, comfort_viol=%.0f, heat=%.2f\n"
+            "Optimal temperature trajectory: %s\n"
+            "Heat inputs: %s",
             self._state.simulated_temperature,
-            self._predict_indoor_temperature(optimal_heat_inputs),
-            optimal_heat_inputs,
+            computation_time * 1000,
+            self._parameters.WEIGHT_TEMPERATURE_DEVIATION,
+            self._parameters.WEIGHT_COMFORT_BAND_VIOLATION,
+            self._parameters.WEIGHT_HEAT_INPUT,
+            np.round(optimal_temperatures, 1),
+            np.round(optimal_heat_inputs, 0),
         )
 
         return self._state.simulated_temperature
