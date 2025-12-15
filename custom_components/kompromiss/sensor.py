@@ -5,6 +5,7 @@ import logging
 from typing import Final
 
 from homeassistant.components.sensor import (
+    EntityCategory,
     SensorDeviceClass,
     SensorEntity,
     SensorStateClass,
@@ -17,9 +18,8 @@ from .device import ensure_device
 
 from .const import (
     DOMAIN,
-    CONF_ACTUAL_OUTDOOR_TEMPERATURE_SENSOR,
-    CONF_INDOOR_TEMPERATURE_SENSOR,
-    CONF_ELECTRICITY_PRICE_SENSOR,
+    ACTUAL_OUTDOOR_TEMPERATURE_SENSOR,
+    INDOOR_TEMPERATURE_SENSOR,
 )
 
 _LOGGER: Final = logging.getLogger(__name__)
@@ -36,7 +36,6 @@ async def async_setup_entry(
         ActualOutdoorTemperatureSensor(config_entry, device.id),
         IndoorTemperatureSensor(config_entry, device.id),
         TemperatureOffsetSensor(config_entry, device.id, controller),
-        ElectricityPriceSensor(config_entry, device.id),
     ]
     async_add_entities(sensors)
 
@@ -63,27 +62,17 @@ class SimulatedOutdoorTemperatureSensor(SensorEntity):
         self._temperature = None
 
     async def async_added_to_hass(self):
-        _LOGGER.debug(
-            "Simulated outdoor temperature sensor subscribing to controller updates"
-        )
         self._controller.async_subscribe_sensor(self._on_temperature_update)
         return await super().async_added_to_hass()
 
     async def async_will_remove_from_hass(self):
         """Clean up when entity is removed."""
-        _LOGGER.debug(
-            "Simulated outdoor temperature sensor unsubscribing from controller updates"
-        )
 
         self._controller.async_unsubscribe_sensor(self._on_temperature_update)
         return await super().async_will_remove_from_hass()
 
     def _on_temperature_update(self, state: ControllerState) -> None:
         """Callback when controller state changes."""
-        _LOGGER.debug(
-            "Simulated outdoor temperature sensor received update: %.2f",
-            state.simulated_outdoor_temperature,
-        )
         self._temperature = state.simulated_outdoor_temperature
         self.schedule_update_ha_state()
 
@@ -107,6 +96,7 @@ class ActualOutdoorTemperatureSensor(SensorEntity):
     _attr_native_unit_of_measurement = "°C"
     _attr_has_entity_name = True
     _attr_name = "Actual Outdoor Temperature"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(self, config_entry: ConfigEntry, device_id: str):
         self._config_entry = config_entry
@@ -123,7 +113,7 @@ class ActualOutdoorTemperatureSensor(SensorEntity):
         if not hass:
             return None
 
-        entity_id = self._config_entry.data.get(CONF_ACTUAL_OUTDOOR_TEMPERATURE_SENSOR)
+        entity_id = self._config_entry.data.get(ACTUAL_OUTDOOR_TEMPERATURE_SENSOR)
 
         if not entity_id:
             return None
@@ -149,6 +139,7 @@ class IndoorTemperatureSensor(SensorEntity):
     _attr_native_unit_of_measurement = "°C"
     _attr_has_entity_name = True
     _attr_name = "Indoor Temperature"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(self, config_entry: ConfigEntry, device_id: str):
         self._config_entry = config_entry
@@ -165,7 +156,7 @@ class IndoorTemperatureSensor(SensorEntity):
         if not hass:
             return None
 
-        entity_id = self._config_entry.data.get(CONF_INDOOR_TEMPERATURE_SENSOR)
+        entity_id = self._config_entry.data.get(INDOOR_TEMPERATURE_SENSOR)
         if not entity_id:
             return None
 
@@ -191,6 +182,7 @@ class TemperatureOffsetSensor(SensorEntity):
     _attr_has_entity_name = True
     _attr_name = "Temperature Offset"
     _attr_unique_id = "kompromiss_temperature_offset"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(
         self,
@@ -229,56 +221,3 @@ class TemperatureOffsetSensor(SensorEntity):
     @property
     def translation_key(self) -> str:
         return "temperature_offset"
-
-
-class ElectricityPriceSensor(SensorEntity):
-    """Sensor entity for the current electricity price."""
-
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_has_entity_name = True
-    _attr_name = "Electricity Price"
-    _attr_unique_id = "kompromiss_electricity_price"
-    _attr_native_unit_of_measurement: str | None = None
-    _attr_suggested_display_precision = 2
-    _attr_icon = "mdi:cash"
-
-    def __init__(self, config_entry: ConfigEntry, device_id: str):
-        self._config_entry = config_entry
-        self._device_id = device_id
-        self._entity_id: str | None = None
-
-    async def async_added_to_hass(self):
-        self._entity_id = self._config_entry.data.get(CONF_ELECTRICITY_PRICE_SENSOR)
-
-        state = self.hass.states.get(self._entity_id)
-
-        if state:
-            self._attr_native_unit_of_measurement = state.attributes.get(
-                "unit_of_measurement"
-            )
-
-        return super().async_added_to_hass()
-
-    @property
-    def device_info(self):
-        return {"identifiers": {(DOMAIN, self._config_entry.entry_id)}}
-
-    @property
-    def native_value(self) -> float | None:
-        state = self.hass.states.get(self._entity_id)
-
-        if state is None:
-            return None
-
-        self._attr_native_unit_of_measurement = state.attributes.get(
-            "unit_of_measurement"
-        )
-
-        try:
-            return float(state.state)
-        except (ValueError, TypeError):
-            return None
-
-    @property
-    def translation_key(self) -> str:
-        return "electricity_price"

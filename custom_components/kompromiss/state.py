@@ -8,8 +8,11 @@ class ControllerState:
         self.simulated_outdoor_temperature: float | None = None
         self.actual_outdoor_temperature: float | None = None
         self.indoor_temperature: float | None = None
+        self.medium_temperature: float | None = None
+        self.return_temperature_setpoint: float | None = None
         self.offset: float | None = None
         self.price_data: list[ElectricityPriceData] = []
+        self.electricity_price: list[ElectricityPriceData] = []
 
     def is_valid(self) -> bool:
         """Check if the state has valid temperature readings."""

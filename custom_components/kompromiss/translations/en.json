@@ -1,4 +1,98 @@
 {
+  "config": {
+    "step": {
+      "user": {
+        "title": "Set up Kompromiss",
+        "description": "Configure the sensors for temperature and electricity price.",
+        "data": {
+          "actual_outdoor_temperature_sensor": "Outdoor Temperature Sensor",
+          "indoor_temperature_sensor": "Indoor Temperature Sensor",
+          "electricity_price_sensor": "Electricity Price Sensor"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Kompromiss Options",
+        "menu_options": {
+          "mpc": "MPC Control Parameters",
+          "heater": "Heater / Heat Pump Settings",
+          "output": "Simulated Outdoor Temperature Settings",
+          "thermal": "Thermal Model Parameters"
+        }
+      },
+      "thermal": {
+        "title": "Thermal Model Parameters",
+        "description": "Configure the thermal characteristics of your building and heating system.",
+        "data": {
+          "thermal_resistance": "Building Thermal Resistance To Outdoor",
+          "thermal_capacitance": "Building Thermal Capacitance",
+          "medium_to_building_thermal_resistance": "Medium Thermal Resistance To Building",
+          "medium_to_outdoor_thermal_resistance": "Medium Thermal Resistance To Outdoor",
+          "medium_thermal_capacity": "Medium Thermal Capacitance"
+        },
+        "data_description": {
+          "thermal_resistance": "Thermal resistance between building and outdoor environment (K/W).",
+          "thermal_capacitance": "Thermal mass of the building (J/K).",
+          "medium_to_building_thermal_resistance": "Thermal resistance between heating medium and building (K/W).",
+          "medium_to_outdoor_thermal_resistance": "Thermal resistance between heating medium and outdoor (K/W).",
+          "medium_thermal_capacity": "Thermal mass of the heating medium/water loop (J/K)."
+        }
+      },
+      "mpc": {
+        "title": "MPC Control Parameters",
+        "description": "Configure Model Predictive Control parameters and cost weights.",
+        "data": {
+          "prediction_horizon": "Prediction Horizon",
+          "time_step": "Time Step",
+          "temperature_deviation_penalty": "Temperature Deviation Penalty Weight",
+          "comfort_band_violation_penalty": "Comfort Band Violation Penalty Weight",
+          "energy_cost_penalty": "Energy Cost Penalty Weight",
+          "simulated_outdoor_move_penalty": "Simulated Outdoor Movement Penalty Weight"
+        },
+        "data_description": {
+          "prediction_horizon": "Number of time steps to predict ahead in MPC optimization.",
+          "time_step": "Duration of each MPC prediction step (seconds).",
+          "temperature_deviation_penalty": "Cost for deviating from target temperature. Higher = stays closer to target.",
+          "comfort_band_violation_penalty": "Large penalty for violating min/max bounds. Should be much higher than deviation penalty.",
+          "energy_cost_penalty": "Weight on electricity cost. Higher = more estimated energy cost savings.",
+          "simulated_outdoor_move_penalty": "Penalizes rapid changes in control output. Higher = smoother operation."
+        }
+      },
+      "heater": {
+        "title": "Heater / Heat Pump Settings",
+        "description": "Configure heater and heat pump parameters.",
+        "data": {
+          "heater_thermal_power": "Heat Pump Maximum Thermal Power",
+          "heat_curve_slope": "Heat Curve Slope",
+          "heat_curve_intercept": "Heat Curve Intercept",
+          "heater_transfer_coefficient": "Heat Pump Heat Transfer Coefficient"
+        },
+        "data_description": {
+          "heater_thermal_power": "Maximum heat output of the heat pump (W).",
+          "heat_curve_slope": "Slope of the heat curve (negative value).",
+          "heat_curve_intercept": "Intercept of the heat curve (°C).",
+          "heater_transfer_coefficient": "Heat transfer efficiency coefficient (W/K)."
+        }
+      },
+      "output": {
+        "title": "Simulated Outdoor Temperature Settings",
+        "description": "Range and behavior of simulated outdoor temperature.",
+        "data": {
+          "lowest_simulated_temperature": "Lowest Allowed Simulated Temperature",
+          "highest_simulated_temperature": "Highest Allowed Simulated Temperature",
+          "simulated_outdoor_move_penalty": "Simulated Outdoor Movement Penalty Weight"
+        },
+        "data_description": {
+          "lowest_simulated_temperature": "Minimum value for the simulated outdoor temperature (°C).",
+          "highest_simulated_temperature": "Maximum value for the simulated outdoor temperature (°C). Set this below your heaters's summer mode threshold to prevent the circulation pump from stopping.",
+          "simulated_outdoor_move_penalty": "Penalizes rapid changes in control output. Higher = smoother operation."
+        }
+      }
+    }
+  },
   "entity": {
     "sensor": {
       "simulated_outdoor_temperature": {
@@ -18,17 +112,14 @@
       }
     },
     "number": {
+      "target_temperature": {
+        "name": "Target Temperature"
+      },
       "minimum_indoor_temperature": {
         "name": "Minimum Indoor Temperature"
       },
       "maximum_indoor_temperature": {
         "name": "Maximum Indoor Temperature"
-      },
-      "weight_temperature_deviation": {
-        "name": "Weight Temperature Deviation Penalty"
-      },
-      "weight_comfort_band_violation": {
-        "name": "Weight Comfort Band Violation Penalty"
       }
     }
   }

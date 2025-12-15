@@ -1,17 +1,51 @@
-"""Model Predictive Control regulator for temperature control using 1R1C thermal model.
+"""Model Predictive Control regulator for temperature control.
 
-Refactored to use CasADi with the IPOPT solver for the MPC optimization problem.
+This implementation models a building with a 1R1C indoor envelope plus a
+thermal medium (e.g. hydronic water loop) that is heated by the heat pump.
+The medium transfers heat to the room and loses heat to the environment. The
+heat pump controls the return temperature of the medium using a linear heat
+curve that maps outdoor temperature to the desired return temperature.
 """
 
 from __future__ import annotations
 
 import logging
-import math
 import time
 from typing import Final
 
 import numpy as np
 import casadi as ca
+
+from ..const import (
+    COMFORT_BAND_VIOLATION_PENALTY,
+    DEFAULT_COMFORT_BAND_VIOLATION_PENALTY,
+    DEFAULT_ENERGY_COST_PENALTY,
+    DEFAULT_HEAT_CURVE_INTERCEPT,
+    DEFAULT_HEAT_CURVE_SLOPE,
+    DEFAULT_HEATER_THERMAL_POWER,
+    DEFAULT_HEATER_TRANSFER_COEFFICIENT,
+    DEFAULT_MAXIMUM_INDOOR_TEMPERATURE,
+    DEFAULT_MAXIMUM_MEDIUM_RETURN_TEMPERATURE,
+    DEFAULT_MEDIUM_THERMAL_CAPACITY,
+    DEFAULT_MEDIUM_TO_OUTDOOR_THERMAL_RESISTANCE,
+    DEFAULT_MEDIUM_TO_BUILDING_THERMAL_RESISTANCE,
+    DEFAULT_MINIMUM_INDOOR_TEMPERATURE,
+    DEFAULT_MINIMUM_MEDIUM_RETURN_TEMPERATURE,
+    DEFAULT_OUTDOOR_RAMP_LIMIT,
+    DEFAULT_PREDICTION_HORIZON,
+    DEFAULT_SIMULATED_OUTDOOR_MOVE_PENALTY,
+    DEFAULT_TARGET_TEMPERATURE,
+    DEFAULT_TEMPERATURE_DEVIATION_PENALTY,
+    DEFAULT_THERMAL_CAPACITANCE,
+    DEFAULT_THERMAL_RESISTANCE,
+    DEFAULT_TIME_STEP,
+    ENERGY_COST_PENALTY,
+    MAXIMUM_INDOOR_TEMPERATURE,
+    MINIMUM_INDOOR_TEMPERATURE,
+    SIMULATED_OUTDOOR_MOVE_PENALTY,
+    TARGET_TEMPERATURE,
+    TEMPERATURE_DEVIATION_PENALTY,
+)
 
 from . import Regulator
 from ..state import ControllerState
@@ -23,60 +57,61 @@ _LOGGER: Final = logging.getLogger(__name__)
 class MPCParameters:
     """Holds parameters for the MPC regulator."""
 
-    R_THERMAL: float = 0.01  # Thermal resistance [K/W]
-    C_THERMAL: float = 3.6e6  # Thermal capacitance [J/K]
+    # Building envelope (room) parameters
+    thermal_resistance: float = DEFAULT_THERMAL_RESISTANCE
+    thermal_capacitance: float = DEFAULT_THERMAL_CAPACITANCE
 
-    HEAT_PUMP_THERMAL_POWER: float = 5000.0  # Maximum heat output [W]
+    # Thermal medium (water loop) parameters
+    medium_to_room_resistance: float = DEFAULT_MEDIUM_TO_BUILDING_THERMAL_RESISTANCE
+    medium_to_outdoor_thermal_resistance: float = (
+        DEFAULT_MEDIUM_TO_OUTDOOR_THERMAL_RESISTANCE
+    )
+    medium_thermal_capacity: float = DEFAULT_MEDIUM_THERMAL_CAPACITY
 
-    TARGET_TEMPERATURE: float = 21.0  # Desired indoor temperature [°C]
-    TARGET_TEMPERATURE_FLOOR: float = 19.5  # Minimum comfort bound [°C]
-    TARGET_TEMPERATURE_CEILING: float = 22.5  # Maximum comfort bound [°C]
+    heater_thermal_power: float = DEFAULT_HEATER_THERMAL_POWER
+    heater_transfer_coefficient: float = DEFAULT_HEATER_TRANSFER_COEFFICIENT
+    minimum_medium_return_temperature: float = DEFAULT_MINIMUM_MEDIUM_RETURN_TEMPERATURE
+    maximum_medium_return_temperature: float = DEFAULT_MAXIMUM_MEDIUM_RETURN_TEMPERATURE
 
-    PREDICTION_HORIZON: int = 12 * 4  # Number of steps to predict ahead
-    TIME_STEP: float = 900.0  # Time step in seconds (15 minutes)
+    heat_curve_slope: float = DEFAULT_HEAT_CURVE_SLOPE
+    heat_curve_intercept: float = DEFAULT_HEAT_CURVE_INTERCEPT
+
+    # Comfort targets
+    target_temperature: float = DEFAULT_TARGET_TEMPERATURE
+    lower_temperature_bound: float = DEFAULT_MINIMUM_INDOOR_TEMPERATURE
+    upper_temperature_bound: float = DEFAULT_MAXIMUM_INDOOR_TEMPERATURE
+
+    # MPC settings
+    prediction_horizon: int = DEFAULT_PREDICTION_HORIZON
+    time_step: float = DEFAULT_TIME_STEP
+    outdoor_ramp_limit: float = DEFAULT_OUTDOOR_RAMP_LIMIT
 
     # MPC cost weights
-    WEIGHT_TEMPERATURE_DEVIATION: float = (
-        1000.0  # Cost for being far from temperature target
-    )
-    WEIGHT_COMFORT_BAND_VIOLATION: float = (
-        10000.0  # Cost for violating comfort band (floor/ceiling)
-    )
-    WEIGHT_HEAT_INPUT: float = 25  # Cost for using energy
+    temperature_deviation_penalty: float = DEFAULT_TEMPERATURE_DEVIATION_PENALTY
+    comfort_band_violation_penalty: float = DEFAULT_COMFORT_BAND_VIOLATION_PENALTY
+    energy_cost_penalty: float = DEFAULT_ENERGY_COST_PENALTY
+    simulated_outdoor_move_penalty: float = DEFAULT_SIMULATED_OUTDOOR_MOVE_PENALTY
 
 
 class MPCRegulator(Regulator):
-    """Full MPC regulator using a 1R1C thermal model.
+    """Full MPC regulator using a 1R1C + medium thermal model.
 
-    The 1R1C model represents a building as:
-    - R (thermal resistance): resistance to heat flow between indoor and outdoor
-    - C (thermal capacitance): ability to store thermal energy
+    States:
+    - Indoor air temperature (room)
+    - Medium temperature (water loop)
 
-    The model: dT_indoor/dt = (T_outdoor - T_indoor)/(R*C) + Q_heat/C
-
-    Where:
-    - T_indoor: indoor temperature
-    - T_outdoor: outdoor temperature
-    - Q_heat: heat power added by heat pump (function of simulated outdoor temp)
-    - Lower simulated temp → more heat output from heat pump
-
-    MPC solves: minimize sum over horizon of (cost of deviation + cost of control)
-    subject to: thermal model constraints and heat pump limits
+    The medium receives heat from the heat pump, transfers heat to the room,
+    and loses heat to the environment. The heat pump regulates the return
+    temperature setpoint via a linear heat curve of outdoor temperature.
     """
 
     def __init__(self) -> None:
         self._state: ControllerState = ControllerState()
         self._parameters: MPCParameters = MPCParameters()
-        self._tau = self._parameters.R_THERMAL * self._parameters.C_THERMAL
-        # Discrete time system model: x[k+1] = A*x[k] + B*u[k] + C*d[k]
-        # where x = indoor temp, u = heat input, d = outdoor temp disturbance
-        self._system_matrix_a = math.exp(-self._parameters.TIME_STEP / self._tau)
-        self._system_matrix_b = (
-            1.0 - self._system_matrix_a
-        ) * self._parameters.R_THERMAL
+        self._time_step: float = self._parameters.time_step
         super().__init__()
 
-    async def set_state(self, state: ControllerState) -> None:
+    def set_state(self, state: ControllerState) -> None:
         """Set the current state including outdoor and indoor temperatures.
 
         Args:
@@ -84,11 +119,9 @@ class MPCRegulator(Regulator):
         """
         self._state = state
 
-    async def get_output(self) -> float | None:
-        """Return the computed simulated outdoor temperature."""
-        if self._state is None:
-            return None
-        return self._state.simulated_temperature
+    def get_state(self) -> ControllerState:
+        """Return the current controller state."""
+        return self._state
 
     def set_weight_temperature_deviation(self, value: float) -> None:
         """Update the weight for temperature deviation from target.
@@ -96,7 +129,7 @@ class MPCRegulator(Regulator):
         Args:
             value: New weight value for temperature deviation cost
         """
-        self._parameters.WEIGHT_TEMPERATURE_DEVIATION = value
+        self._parameters.temperature_deviation_penalty = value
 
         _LOGGER.debug("MPC weight for temperature deviation updated to %.2f", value)
 
@@ -106,108 +139,257 @@ class MPCRegulator(Regulator):
         Args:
             value: New weight value for comfort band violation cost
         """
-        self._parameters.WEIGHT_COMFORT_BAND_VIOLATION = value
+        self._parameters.comfort_band_violation_penalty = value
 
         _LOGGER.debug("MPC weight for comfort band violation updated to %.2f", value)
 
-    def _optimize_heat_input(
-        self,
-        initial_temp: float,
-    ) -> tuple[np.ndarray, np.ndarray]:
-        """Solve MPC using CasADi IPOPT.
+    def update_parameters_from_options(self, options: dict) -> None:
+        """Update all MPC parameters from config entry options.
 
         Args:
-            initial_temp: Current indoor temperature
-
-        Returns:
-            Tuple of (optimal heat inputs, optimal temperature trajectory)
+            options: Dictionary of options from config entry
         """
 
+        if TARGET_TEMPERATURE in options:
+            self._parameters.target_temperature = options[TARGET_TEMPERATURE]
+        if MINIMUM_INDOOR_TEMPERATURE in options:
+            self._parameters.lower_temperature_bound = options[
+                MINIMUM_INDOOR_TEMPERATURE
+            ]
+        if MAXIMUM_INDOOR_TEMPERATURE in options:
+            self._parameters.upper_temperature_bound = options[
+                MAXIMUM_INDOOR_TEMPERATURE
+            ]
+
+        if "r_thermal" in options:
+            self._parameters.thermal_resistance = options["r_thermal"]
+        if "c_thermal" in options:
+            self._parameters.thermal_capacitance = options["c_thermal"]
+        if "r_medium_to_room" in options:
+            self._parameters.medium_to_room_resistance = options["r_medium_to_room"]
+        if "r_medium_to_environment" in options:
+            self._parameters.medium_to_outdoor_thermal_resistance = options[
+                "r_medium_to_environment"
+            ]
+        if "c_medium" in options:
+            self._parameters.medium_thermal_capacity = options["c_medium"]
+
+        if "heat_pump_thermal_power" in options:
+            self._parameters.heater_thermal_power = options["heat_pump_thermal_power"]
+        if "heat_pump_heat_transfer_coeff" in options:
+            self._parameters.heater_transfer_coefficient = options[
+                "heat_pump_heat_transfer_coeff"
+            ]
+        if "return_temperature_min" in options:
+            self._parameters.minimum_medium_return_temperature = options[
+                "return_temperature_min"
+            ]
+        if "return_temperature_max" in options:
+            self._parameters.maximum_medium_return_temperature = options[
+                "return_temperature_max"
+            ]
+
+        if "heat_curve_slope" in options:
+            self._parameters.heat_curve_slope = options["heat_curve_slope"]
+        if "heat_curve_intercept" in options:
+            self._parameters.heat_curve_intercept = options["heat_curve_intercept"]
+
+        if "time_step" in options:
+            self._parameters.time_step = options["time_step"]
+            self._time_step = options["time_step"]
+        if "ramp_limit_outdoor" in options:
+            self._parameters.outdoor_ramp_limit = options["ramp_limit_outdoor"]
+
+        if TEMPERATURE_DEVIATION_PENALTY in options:
+            self._parameters.temperature_deviation_penalty = options[
+                TEMPERATURE_DEVIATION_PENALTY
+            ]
+        if COMFORT_BAND_VIOLATION_PENALTY in options:
+            self._parameters.comfort_band_violation_penalty = options[
+                COMFORT_BAND_VIOLATION_PENALTY
+            ]
+        if ENERGY_COST_PENALTY in options:
+            self._parameters.energy_cost_penalty = options[ENERGY_COST_PENALTY]
+        if SIMULATED_OUTDOOR_MOVE_PENALTY in options:
+            self._parameters.simulated_outdoor_move_penalty = options[
+                SIMULATED_OUTDOOR_MOVE_PENALTY
+            ]
+
+    def _heat_from_return_setpoint(
+        self, return_temp: ca.SX, medium_temp: ca.SX
+    ) -> ca.SX:
+        """Convert a return temperature setpoint to heat flow into the medium.
+
+        The heat pump tries to lift the medium temperature towards the
+        setpoint. The delivered heat is capped by the maximum thermal power and
+        cannot be negative.
+        """
+
+        delta = return_temp - medium_temp
+        raw_heat = self._parameters.heater_transfer_coefficient * delta
+        capped = ca.fmin(self._parameters.heater_thermal_power, raw_heat)
+        return ca.fmax(0.0, capped)
+
+    def _optimize_return_temperature(
+        self,
+        initial_room_temp: float,
+        initial_medium_temp: float,
+        prev_simulated_outdoor: float,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        """Solve MPC using CasADi IPOPT with room + medium dynamics."""
+
+        horizon = self._parameters.prediction_horizon
+        time_step = self._time_step
+        outdoor_temp = self._state.actual_outdoor_temperature
+        slope = self._parameters.heat_curve_slope
+        intercept = self._parameters.heat_curve_intercept
+        ramp_limit = self._parameters.outdoor_ramp_limit
+        move_weight = self._parameters.simulated_outdoor_move_penalty
+
+        if slope == 0:
+            raise RuntimeError("Heat curve slope cannot be zero")
+
+        def _simulated_outdoor(u: ca.SX) -> ca.SX:
+            return (u - intercept) / slope
+
         # Decision variables
-        heat_input_variable = ca.SX.sym("u", self._parameters.PREDICTION_HORIZON)
-        temperature_state = ca.SX.sym("x", self._parameters.PREDICTION_HORIZON + 1)
-        slack_lower = ca.SX.sym("sL", self._parameters.PREDICTION_HORIZON)
-        slack_upper = ca.SX.sym("sH", self._parameters.PREDICTION_HORIZON)
+        return_temp_setpoints = ca.SX.sym("u_return", horizon)
+        room_temps = ca.SX.sym("x_room", horizon + 1)
+        medium_temps = ca.SX.sym("x_medium", horizon + 1)
+        slack_lower = ca.SX.sym("sL", horizon)
+        slack_upper = ca.SX.sym("sH", horizon)
 
         # Objective
         objective = 0
-        for step in range(self._parameters.PREDICTION_HORIZON):
-            # Penalize deviation from target temperature
-            temperature_error = (
-                temperature_state[step] - self._parameters.TARGET_TEMPERATURE
+        for step in range(horizon):
+            temperature_error = room_temps[step] - self._parameters.target_temperature
+            heat_flow = self._heat_from_return_setpoint(
+                return_temp_setpoints[step], medium_temps[step]
             )
             energy_cost = (
-                heat_input_variable[step]
-                / 1000
-                * self._state.electricity_prices[step].price
-                / 4
+                heat_flow / 1000 * self._state.electricity_price[step].price / 4
             )
+
+            if step == 0:
+                delta_simulated = (
+                    _simulated_outdoor(return_temp_setpoints[step])
+                    - prev_simulated_outdoor
+                )
+            else:
+                delta_simulated = _simulated_outdoor(
+                    return_temp_setpoints[step]
+                ) - _simulated_outdoor(return_temp_setpoints[step - 1])
             objective = (
                 objective
-                + self._parameters.WEIGHT_TEMPERATURE_DEVIATION * (temperature_error**2)
-                + self._parameters.WEIGHT_COMFORT_BAND_VIOLATION
+                + self._parameters.temperature_deviation_penalty
+                * (temperature_error**2)
+                + self._parameters.comfort_band_violation_penalty
                 * (slack_lower[step] ** 2 + slack_upper[step] ** 2)
-                + self._parameters.WEIGHT_HEAT_INPUT * energy_cost
+                + self._parameters.energy_cost_penalty * energy_cost
+                + move_weight * (delta_simulated**2)
             )
 
-        # Constraints
-        constraints = []
-        constraints_lower = []
-        constraints_upper = []
+        constraints: list[ca.SX] = []
+        constraints_lower: list[float] = []
+        constraints_upper: list[float] = []
 
-        # Initial condition
-        constraints.append(temperature_state[0] - initial_temp)
+        # Initial conditions
+        constraints.append(room_temps[0] - initial_room_temp)
+        constraints_lower.append(0.0)
+        constraints_upper.append(0.0)
+
+        constraints.append(medium_temps[0] - initial_medium_temp)
         constraints_lower.append(0.0)
         constraints_upper.append(0.0)
 
         # Dynamics and slack constraints
-        for step in range(self._parameters.PREDICTION_HORIZON):
-            constraints.append(
-                temperature_state[step + 1]
-                - (
-                    self._system_matrix_a * temperature_state[step]
-                    + self._system_matrix_b * heat_input_variable[step]
-                    + (1.0 - self._system_matrix_a)
-                    * self._state.actual_outdoor_temperature
+        for step in range(horizon):
+            heat_flow = self._heat_from_return_setpoint(
+                return_temp_setpoints[step], medium_temps[step]
+            )
+
+            next_room = room_temps[step] + time_step * (
+                (outdoor_temp - room_temps[step])
+                / (
+                    self._parameters.thermal_resistance
+                    * self._parameters.thermal_capacitance
+                )
+                + (medium_temps[step] - room_temps[step])
+                / (
+                    self._parameters.medium_to_room_resistance
+                    * self._parameters.thermal_capacitance
                 )
             )
+
+            next_medium = medium_temps[step] + time_step * (
+                heat_flow / self._parameters.medium_thermal_capacity
+                - (medium_temps[step] - room_temps[step])
+                / (
+                    self._parameters.medium_to_room_resistance
+                    * self._parameters.medium_thermal_capacity
+                )
+                - (medium_temps[step] - outdoor_temp)
+                / (
+                    self._parameters.medium_to_outdoor_thermal_resistance
+                    * self._parameters.medium_thermal_capacity
+                )
+            )
+
+            constraints.append(room_temps[step + 1] - next_room)
+            constraints_lower.append(0.0)
+            constraints_upper.append(0.0)
+
+            constraints.append(medium_temps[step + 1] - next_medium)
             constraints_lower.append(0.0)
             constraints_upper.append(0.0)
 
             constraints.append(
-                temperature_state[step]
+                room_temps[step]
                 + slack_lower[step]
-                - self._parameters.TARGET_TEMPERATURE_FLOOR
+                - self._parameters.lower_temperature_bound
             )
             constraints_lower.append(0.0)
             constraints_upper.append(ca.inf)
 
             constraints.append(
-                -temperature_state[step]
+                -room_temps[step]
                 + slack_upper[step]
-                + self._parameters.TARGET_TEMPERATURE_CEILING
+                + self._parameters.upper_temperature_bound
             )
             constraints_lower.append(0.0)
             constraints_upper.append(ca.inf)
 
-        # Variable vector
+            if step == 0:
+                delta_simulated = (
+                    _simulated_outdoor(return_temp_setpoints[step])
+                    - prev_simulated_outdoor
+                )
+            else:
+                delta_simulated = _simulated_outdoor(
+                    return_temp_setpoints[step]
+                ) - _simulated_outdoor(return_temp_setpoints[step - 1])
+
+            constraints.append(delta_simulated)
+            constraints_lower.append(-ramp_limit)
+            constraints_upper.append(ramp_limit)
+
         decision_vars = ca.vertcat(
-            heat_input_variable, temperature_state, slack_lower, slack_upper
+            return_temp_setpoints, room_temps, medium_temps, slack_lower, slack_upper
         )
 
-        # Bounds
         decision_lower_bounds = (
-            [0.0] * self._parameters.PREDICTION_HORIZON
-            + [-ca.inf] * (self._parameters.PREDICTION_HORIZON + 1)
-            + [0.0] * self._parameters.PREDICTION_HORIZON
-            + [0.0] * self._parameters.PREDICTION_HORIZON
+            [self._parameters.minimum_medium_return_temperature] * horizon
+            + [-ca.inf] * (horizon + 1)
+            + [-ca.inf] * (horizon + 1)
+            + [0.0] * horizon
+            + [0.0] * horizon
         )
         decision_upper_bounds = (
-            [self._parameters.HEAT_PUMP_THERMAL_POWER]
-            * self._parameters.PREDICTION_HORIZON
-            + [ca.inf] * (self._parameters.PREDICTION_HORIZON + 1)
-            + [ca.inf] * self._parameters.PREDICTION_HORIZON
-            + [ca.inf] * self._parameters.PREDICTION_HORIZON
+            [self._parameters.maximum_medium_return_temperature] * horizon
+            + [ca.inf] * (horizon + 1)
+            + [ca.inf] * (horizon + 1)
+            + [ca.inf] * horizon
+            + [ca.inf] * horizon
         )
 
         nlp = {"x": decision_vars, "f": objective, "g": ca.vertcat(*constraints)}
@@ -223,23 +405,17 @@ class MPCRegulator(Regulator):
         }
         solver = ca.nlpsol("solver", "ipopt", nlp, solver_opts)
 
-        # Initial guess
-        temperature_initial_guess = [initial_temp]
-        for _ in range(self._parameters.PREDICTION_HORIZON):
-            temperature_initial_guess.append(
-                float(
-                    self._system_matrix_a * temperature_initial_guess[-1]
-                    + (1.0 - self._system_matrix_a)
-                    * self._state.actual_outdoor_temperature
-                )
-            )
-        heat_initial_guess = [0.0] * self._parameters.PREDICTION_HORIZON
-        slack_initial_guess = [0.0] * self._parameters.PREDICTION_HORIZON
+        # Initial guess: keep temperatures near initial, setpoints near intercept
+        room_guess = [initial_room_temp]
+        medium_guess = [initial_medium_temp]
+        for _ in range(horizon):
+            room_guess.append(room_guess[-1])
+            medium_guess.append(medium_guess[-1])
+
+        return_guess = [self._parameters.heat_curve_intercept] * horizon
+        slack_guess = [0.0] * horizon
         initial_guess = (
-            heat_initial_guess
-            + temperature_initial_guess
-            + slack_initial_guess
-            + slack_initial_guess
+            return_guess + room_guess + medium_guess + slack_guess + slack_guess
         )
 
         solution = solver(
@@ -251,105 +427,136 @@ class MPCRegulator(Regulator):
         )
 
         solution_vector = np.array(solution["x"]).flatten()
-        optimal_heat_inputs = solution_vector[: self._parameters.PREDICTION_HORIZON]
+        idx = 0
+        optimal_return_setpoints = solution_vector[idx : idx + horizon]
+        idx += horizon
 
-        # Extract temperature trajectory
-        temp_start = self._parameters.PREDICTION_HORIZON
-        temp_end = temp_start + self._parameters.PREDICTION_HORIZON + 1
-        optimal_temperatures = solution_vector[temp_start:temp_end]
+        optimal_room_temps = solution_vector[idx : idx + horizon + 1]
+        idx += horizon + 1
 
-        return optimal_heat_inputs.astype(float), optimal_temperatures.astype(float)
+        optimal_medium_temps = solution_vector[idx : idx + horizon + 1]
+        idx += horizon + 1
+
+        # Compute heat inputs for logging and energy calculations
+        heat_inputs = []
+        for step in range(horizon):
+            heat_inputs.append(
+                min(
+                    self._parameters.heater_thermal_power,
+                    max(
+                        0.0,
+                        self._parameters.heater_transfer_coefficient
+                        * (optimal_return_setpoints[step] - optimal_medium_temps[step]),
+                    ),
+                )
+            )
+
+        return (
+            optimal_return_setpoints.astype(float),
+            optimal_room_temps.astype(float),
+            optimal_medium_temps.astype(float),
+            np.array(heat_inputs, dtype=float),
+        )
 
     async def async_regulate(self) -> float:
         """Run MPC to compute optimal simulated outdoor temperature.
 
         The MPC algorithm:
-        1. Predict future indoor temperature over horizon using thermal model
-        2. Optimize heat input sequence to minimize deviation from target and energy use
-        3. Convert optimal first heat input to simulated outdoor temperature
-        4. Lower simulated temp = more heat from heat pump
+        1. Predict future indoor and medium temperatures over horizon
+        2. Optimize return temperature setpoints to minimize deviation and energy use
+        3. Convert the first return setpoint to a simulated outdoor temperature using the heat curve
+        4. Lower simulated temp → higher return setpoint → more heat
         """
         if self._state is None or not self._state.is_valid():
             if self._state and self._state.actual_outdoor_temperature is not None:
-                self._state.simulated_temperature = (
+                self._state.simulated_outdoor_temperature = (
                     self._state.actual_outdoor_temperature
                 )
-            return self._state.simulated_temperature if self._state else None
+            return self._state.simulated_outdoor_temperature if self._state else None
 
-        if self._state.electricity_prices is None:
+        if self._state.electricity_price is None:
             raise RuntimeError("No electricity price data available for MPC regulation")
 
-        if len(self._state.electricity_prices) < self._parameters.PREDICTION_HORIZON:
-            available = len(self._state.electricity_prices)
-            required = self._parameters.PREDICTION_HORIZON
+        if len(self._state.electricity_price) < self._parameters.prediction_horizon:
+            available = len(self._state.electricity_price)
+            required = self._parameters.prediction_horizon
             raise RuntimeError(
                 f"Insufficient electricity price data for MPC regulation. \n"
                 f"Only {available} points available, but {required} required."
             )
+        initial_room_temp = self._state.indoor_temperature
+        initial_medium_temp = (
+            self._state.medium_temperature
+            if self._state.medium_temperature is not None
+            else initial_room_temp
+            if initial_room_temp is not None
+            else self._parameters.target_temperature
+        )
 
-        _LOGGER.debug("Electricity prices for MPC: %s", self._state.electricity_prices)
-        for electricity_price in self._state.electricity_prices:
-            _LOGGER.debug("Electricity price: %s", electricity_price)
+        prev_simulated_outdoor = (
+            self._state.simulated_outdoor_temperature
+            if self._state.simulated_outdoor_temperature is not None
+            else self._state.actual_outdoor_temperature
+            if self._state.actual_outdoor_temperature is not None
+            else self._state.actual_outdoor_temperature
+        )
+        if prev_simulated_outdoor is None:
+            raise RuntimeError("No reference outdoor temperature for ramp constraint")
 
-        # Optimize heat input over prediction horizon
+        # Optimize return temperature setpoints over prediction horizon
         start_time = time.perf_counter()
-        optimal_heat_inputs, optimal_temperatures = self._optimize_heat_input(
-            self._state.indoor_temperature,
+        (
+            optimal_return_setpoints,
+            optimal_room_temps,
+            optimal_medium_temps,
+            optimal_heat_inputs,
+        ) = self._optimize_return_temperature(
+            initial_room_temp, initial_medium_temp, prev_simulated_outdoor
         )
 
-        # Use the first optimal heat input
-        optimal_heat = optimal_heat_inputs[0]
+        # Use the first control move
+        optimal_return = float(optimal_return_setpoints[0])
+        first_heat_input = float(optimal_heat_inputs[0])
 
-        # Convert required heat to simulated outdoor temperature
-        # Lower simulated temp → heat pump works harder → more heat
-        # Normalized heat: 0 to 1
-        normalized_heat = optimal_heat / self._parameters.HEAT_PUMP_THERMAL_POWER
+        # Convert return setpoint to simulated outdoor temperature via heat curve
+        if self._parameters.heat_curve_slope == 0:
+            raise RuntimeError("Heat curve slope cannot be zero")
 
-        # Temperature offset: 0 to -10°C based on heat demand
-        temp_offset = -10.0 * normalized_heat
+        simulated_outdoor_temperature = (
+            optimal_return - self._parameters.heat_curve_intercept
+        ) / self._parameters.heat_curve_slope
 
-        self._state.simulated_temperature = (
-            self._state.actual_outdoor_temperature + temp_offset
-        )
-
-        if (
-            self._state.simulated_outdoor_temperature
-            < self.MINIMUM_SIMULATED_TEMPERATURE
-        ):
-            _LOGGER.warning(
-                "Simulated outdoor temperature %.2f°C is below minimum %.2f°C",
-                self._state.simulated_outdoor_temperature,
-                self.MINIMUM_SIMULATED_TEMPERATURE,
-            )
-        if (
-            self._state.simulated_outdoor_temperature
-            > self.MAXIMUM_SIMULATED_TEMPERATURE
-        ):
-            _LOGGER.warning(
-                "Simulated outdoor temperature %.2f°C is above maximum %.2f°C",
-                self._state.simulated_outdoor_temperature,
-                self.MAXIMUM_SIMULATED_TEMPERATURE,
-            )
-
-        # Ensure simulated temp stays within bounds
-        self._state.simulated_temperature = max(
+        # Clamp simulated temperature to allowed bounds
+        simulated_outdoor_temperature = max(
             self.MINIMUM_SIMULATED_TEMPERATURE,
-            min(self.MAXIMUM_SIMULATED_TEMPERATURE, self._state.simulated_temperature),
+            min(simulated_outdoor_temperature, self.MAXIMUM_SIMULATED_TEMPERATURE),
         )
+
+        self._state.return_temperature_setpoint = optimal_return
+        self._state.medium_temperature = float(optimal_medium_temps[1])
+        self._state.simulated_outdoor_temperature = simulated_outdoor_temperature
+        self._state.offset = (
+            self._state.simulated_outdoor_temperature
+            - self._state.actual_outdoor_temperature
+        )
+
         computation_time = time.perf_counter() - start_time
 
         _LOGGER.debug(
             "MPC regulation computed simulated outdoor temperature: %.2f°C in %.0fms.\n"
+            "Return setpoint: %.2f°C, first heat input: %.0f W\n"
             "Weights: temp_dev=%.0f, comfort_viol=%.0f, heat=%.2f\n"
-            "Optimal temperature trajectory: %s\n"
+            "Room temperatures: %s\n"
+            "Medium temperatures: %s\n"
             "Heat inputs: %s",
-            self._state.simulated_temperature,
+            self._state.simulated_outdoor_temperature,
             computation_time * 1000,
-            self._parameters.WEIGHT_TEMPERATURE_DEVIATION,
-            self._parameters.WEIGHT_COMFORT_BAND_VIOLATION,
-            self._parameters.WEIGHT_HEAT_INPUT,
-            np.round(optimal_temperatures, 1),
+            optimal_return,
+            first_heat_input,
+            self._parameters.temperature_deviation_penalty,
+            self._parameters.comfort_band_violation_penalty,
+            self._parameters.energy_cost_penalty,
+            np.round(optimal_room_temps, 1),
+            np.round(optimal_medium_temps, 1),
             np.round(optimal_heat_inputs, 0),
         )
-
-        return self._state.simulated_temperature

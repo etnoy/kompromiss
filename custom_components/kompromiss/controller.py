@@ -140,12 +140,21 @@ class TemperatureController:
         if not self._price_data:
             raise RuntimeError("No electricity price data available")
 
-        self._state.electricity_prices = self._price_data
+        self._state.electricity_price = self._price_data
 
-        await self._regulator.set_state(self._state)
+        self._regulator.set_state(self._state)
+
+        await self._regulate()
+
+    async def _regulate(self) -> None:
+        """Invoke the regulator to compute new simulated outdoor temperature."""
+
         await self._regulator.async_regulate()
-        self._state.simulated_outdoor_temperature = await self._regulator.get_output()
-        self._state.offset = self._compute_temperature_offset()
+        regulator_output = self._regulator.get_state()
+        self._state.simulated_outdoor_temperature = (
+            regulator_output.simulated_outdoor_temperature
+        )
+        self._state.offset = regulator_output.offset
 
         await self._notify_subscribers()
 
@@ -156,3 +165,12 @@ class TemperatureController:
     async def _handle_weight_comfort_violation_changed(self, value: float) -> None:
         """Handle weight comfort band violation parameter change."""
         self._regulator.set_weight_comfort_band_violation(value)
+
+    async def update_parameters_from_options(self, options: dict) -> None:
+        """Update regulator parameters from config entry options.
+
+        Args:
+            options: Dictionary of options from config entry
+        """
+        self._regulator.update_parameters_from_options(options)
+        await self._regulate()

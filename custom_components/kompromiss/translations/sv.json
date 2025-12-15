@@ -1,4 +1,98 @@
 {
+  "config": {
+    "step": {
+      "user": {
+        "title": "Konfigurera Kompromiss",
+        "description": "Konfigurera sensorer för temperatur och elpris.",
+        "data": {
+          "actual_outdoor_temperature_sensor": "Utetemperatursensor",
+          "indoor_temperature_sensor": "Innetemperatursensor",
+          "electricity_price_sensor": "Elprisensor"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Kompromiss-inställningar",
+        "menu_options": {
+          "mpc": "MPC-styrparametrar",
+          "heater": "Värmepump-inställningar",
+          "output": "Inställningar för simulerad utetemperatur",
+          "thermal": "Termiska modellparametrar"
+        }
+      },
+      "thermal": {
+        "title": "Termiska modellparametrar",
+        "description": "Konfigurera de termiska egenskaperna för din byggnad och värmesystem.",
+        "data": {
+          "thermal_resistance": "Termiskt motstånd rum (rum  ute)",
+          "thermal_capacitance": "Termisk kapacitans rum",
+          "medium_to_building_thermal_resistance": "Termiskt motstånd medium (medium  rum)",
+          "medium_to_outdoor_thermal_resistance": "Termiskt motstånd medium (medium  ute)",
+          "medium_thermal_capacity": "Termisk kapacitans medium"
+        },
+        "data_description": {
+          "thermal_resistance": "Termiskt motstånd mellan rum och utomhusmiljö (K/W).",
+          "thermal_capacitance": "Termisk massa hos rummet/byggnaden (J/K).",
+          "medium_to_building_thermal_resistance": "Termiskt motstånd mellan värmemedium och rum (K/W).",
+          "medium_to_outdoor_thermal_resistance": "Termiskt motstånd mellan värmemedium och utomhus (K/W).",
+          "medium_thermal_capacity": "Termisk massa hos värmemediet/vattenslingan (J/K)."
+        }
+      },
+      "mpc": {
+        "title": "MPC-styrparametrar",
+        "description": "Konfigurera parametrar och kostnadsvikter för modellprediktiv styrning.",
+        "data": {
+          "prediction_horizon": "Prediktionshorisont",
+          "time_step": "Tidssteg",
+          "temperature_deviation_penalty": "Vikt för straff vid temperaturavvikelse",
+          "comfort_band_violation_penalty": "Vikt för straff vid komfortgränsöverträdelse",
+          "energy_cost_penalty": "Vikt för straff vid energikostnad",
+          "simulated_outdoor_move_penalty": "Vikt för straff vid simulerad uteförändring"
+        },
+        "data_description": {
+          "prediction_horizon": "Antal tidssteg att förutsäga framåt i MPC-optimering.",
+          "time_step": "Varaktighet för varje MPC-prediktionssteg (sekunder).",
+          "temperature_deviation_penalty": "Kostnad för att avvika från måltemperatur. Högre = håller närmare målet.",
+          "comfort_band_violation_penalty": "Stort straff för att bryta mot min/max-gränser. Bör vara mycket högre än avvikelsestraffet.",
+          "energy_cost_penalty": "Vikt på elkostnad. Högre = mer aggressiv energibesparing.",
+          "simulated_outdoor_move_penalty": "Straffar snabba förändringar i styrningen. Högre = jämnare drift."
+        }
+      },
+      "heater": {
+        "title": "Värmepump-inställningar",
+        "description": "Konfigurera värmepumpsparametrar.",
+        "data": {
+          "heater_thermal_power": "Värmepumpens maximala termiska effekt",
+          "heat_curve_slope": "Värmekurvans lutning",
+          "heat_curve_intercept": "Värmekurvans skärningspunkt",
+          "heater_transfer_coefficient": "Värmepumpens värmeöverföringskoefficient"
+        },
+        "data_description": {
+          "heater_thermal_power": "Maximal värmeavgivning från värmepumpen (W).",
+          "heat_curve_slope": "Lutning på värmekurvan (negativt värde).",
+          "heat_curve_intercept": "Skärningspunkt för värmekurvan (°C).",
+          "heater_transfer_coefficient": "Värmeöverföringseffektivitetskoefficient (W/K)."
+        }
+      },
+      "output": {
+        "title": "Inställningar för simulerad utetemperatur",
+        "description": "Konfigurera utdataområde och beteende för simulerad utetemperatur.",
+        "data": {
+          "lowest_simulated_temperature": "Lägsta simulerade temperatur",
+          "highest_simulated_temperature": "Högsta simulerade temperatur",
+          "simulated_outdoor_move_penalty": "Vikt för straff vid simulerad uteförändring"
+        },
+        "data_description": {
+          "lowest_simulated_temperature": "Minimivärde för simulerad utetemperatur (°C).",
+          "highest_simulated_temperature": "Maximivärde för simulerad utetemperatur (°C).",
+          "simulated_outdoor_move_penalty": "Straffar snabba förändringar i styrningen. Högre = jämnare drift."
+        }
+      }
+    }
+  },
   "entity": {
     "sensor": {
       "simulated_outdoor_temperature": {
@@ -18,17 +112,14 @@
       }
     },
     "number": {
+      "target_temperature": {
+        "name": "Måltemperatur inne"
+      },
       "minimum_indoor_temperature": {
         "name": "Lägsta tillåtna innetemperatur"
       },
       "maximum_indoor_temperature": {
         "name": "Högsta tillåtna innetemperatur"
-      },
-      "weight_temperature_deviation": {
-        "name": "Vikt temperaturavvikelse"
-      },
-      "weight_comfort_band_violation": {
-        "name": "Vikt komfortgränsöverträdelse"
       }
     }
   }
