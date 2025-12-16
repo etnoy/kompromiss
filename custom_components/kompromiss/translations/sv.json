@@ -109,6 +109,12 @@
       },
       "electricity_price": {
         "name": "Elpris"
+      },
+      "projected_medium_temperature": {
+        "name": "Prognostiserad medietemperatur"
+      },
+      "projected_thermal_power": {
+        "name": "Prognostiserad värmeeffekt"
       }
     },
     "number": {

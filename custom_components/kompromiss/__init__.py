@@ -6,7 +6,6 @@ from .const import (
     PLATFORMS,
     DOMAIN,
     ACTUAL_OUTDOOR_TEMPERATURE_SENSOR,
-    SIMULATED_OUTDOOR_TEMPERATURE_SENSOR,
 )
 from .controller import TemperatureController
 
@@ -15,15 +14,11 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
     hass.data.setdefault(DOMAIN, {})
 
     actual_temp_entity_id = config_entry.data.get(ACTUAL_OUTDOOR_TEMPERATURE_SENSOR)
-    simulated_temperature_entity_id = config_entry.data.get(
-        SIMULATED_OUTDOOR_TEMPERATURE_SENSOR
-    )
     indoor_temperature_entity_id = config_entry.data.get(INDOOR_TEMPERATURE_SENSOR)
 
     controller = TemperatureController(
         hass,
         actual_temp_entity_id,
-        simulated_temperature_entity_id,
         indoor_temperature_entity_id,
     )
 

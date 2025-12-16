@@ -31,12 +31,10 @@ class TemperatureController:
         self,
         hass: HomeAssistant,
         actual_temperature_entity_id: str,
-        simulated_temperature_entity_id: str,
         indoor_temperature_entity_id: str,
     ):
         self._hass = hass
         self._actual_outdoor_temperature_entity_id = actual_temperature_entity_id
-        self._simulated_outdoor_temperature_entity_id = simulated_temperature_entity_id
         self._indoor_temperature_entity_id = indoor_temperature_entity_id
         self._regulator: MPCRegulator = MPCRegulator()
         self._unsub = None
@@ -59,18 +57,6 @@ class TemperatureController:
         """Notify all subscribers of state changes."""
         for callback in self._subscribers:
             callback(self._state)
-
-    def _compute_temperature_offset(self) -> float | None:
-        """Get the current temperature offset (simulated - actual)."""
-        if (
-            self._state.simulated_outdoor_temperature is None
-            or self._state.actual_outdoor_temperature is None
-        ):
-            return None
-        return (
-            self._state.simulated_outdoor_temperature
-            - self._state.actual_outdoor_temperature
-        )
 
     async def async_subscribe(self) -> None:
         """Register a listener for state updates."""
@@ -149,12 +135,12 @@ class TemperatureController:
     async def _regulate(self) -> None:
         """Invoke the regulator to compute new simulated outdoor temperature."""
 
+        if self._state is None or not self._state.is_valid():
+            _LOGGER.debug("Controller state is not valid, skipping regulation")
+            return
+
         await self._regulator.async_regulate()
-        regulator_output = self._regulator.get_state()
-        self._state.simulated_outdoor_temperature = (
-            regulator_output.simulated_outdoor_temperature
-        )
-        self._state.offset = regulator_output.offset
+        self._state = self._regulator.get_state()
 
         await self._notify_subscribers()
 

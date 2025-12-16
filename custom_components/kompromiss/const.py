@@ -12,8 +12,6 @@ TARGET_TEMPERATURE = "target_temperature"
 DEFAULT_TARGET_TEMPERATURE = 21.0
 MINIMUM_INDOOR_TEMPERATURE = "minimum_indoor_temperature"
 DEFAULT_MINIMUM_INDOOR_TEMPERATURE = 19.5
-MAXIMUM_INDOOR_TEMPERATURE = "maximum_indoor_temperature"
-DEFAULT_MAXIMUM_INDOOR_TEMPERATURE = 22.5
 
 TEMPERATURE_DEVIATION_PENALTY = "temperature_deviation_penalty"
 DEFAULT_TEMPERATURE_DEVIATION_PENALTY = 100.0
@@ -50,8 +48,12 @@ MAXIMUM_MEDIUM_RETURN_TEMPERATURE = "maximum_medium_return_temperature"
 DEFAULT_MAXIMUM_MEDIUM_RETURN_TEMPERATURE = 65.0
 
 PREDICTION_HORIZON = "prediction_horizon"
-DEFAULT_PREDICTION_HORIZON = 12 * 4
+
+# 16 hours with 15 min time steps
+DEFAULT_PREDICTION_HORIZON = 16 * 4
 TIME_STEP = "time_step"
+
+# 15 minutes in seconds
 DEFAULT_TIME_STEP = 900.0
 OUTDOOR_RAMP_LIMIT = "outdoor_ramp_limit"
 DEFAULT_OUTDOOR_RAMP_LIMIT = 4.0
@@ -74,8 +76,3 @@ SIGNAL_MPC_WEIGHT_TEMP_DEVIATION_CHANGED = (
 SIGNAL_MPC_WEIGHT_COMFORT_VIOLATION_CHANGED = (
     "kompromiss_mpc_weight_comfort_violation_changed"
 )
-
-# Electricity price usually updates every 15 minutes, so align with that
-DEFAULT_STEP_MINUTES = 15
-DEFAULT_HORIZON_STEPS = 8
-DEFAULT_ENABLED = True

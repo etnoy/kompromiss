@@ -16,7 +16,6 @@ from .const import (
     DOMAIN,
     DEFAULT_TARGET_TEMPERATURE,
     DEFAULT_MINIMUM_INDOOR_TEMPERATURE,
-    DEFAULT_MAXIMUM_INDOOR_TEMPERATURE,
 )
 
 
@@ -57,16 +56,6 @@ NUMBER_ENTITIES = [
         max_value=50.0,
         step=0.1,
         translation_key="minimum_indoor_temperature",
-        unit_of_measurement="°C",
-    ),
-    NumberConfig(
-        unique_id="kompromiss_maximum_indoor_temperature",
-        storage_key="maximum_indoor_temperature",
-        default_value=DEFAULT_MAXIMUM_INDOOR_TEMPERATURE,
-        min_value=5.0,
-        max_value=50.0,
-        step=0.1,
-        translation_key="maximum_indoor_temperature",
         unit_of_measurement="°C",
     ),
 ]
