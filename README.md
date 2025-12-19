@@ -1,10 +1,14 @@
-**kompromiss** *(noun)* - the Swedish word for compromise and similar to **kompressor**, the Swedish word for compressor that drives our heat pumps
+<img src="https://raw.githubusercontent.com/etnoy/kompromiss/main/graphics/icon-1000.png" alt="https://github.com/etnoy/kompromiss" width="200"/>
+
+**kompromiss** *(noun)* - the Swedish word for compromise and similar to **kompressor**, the Swedish word for compressor that drives our heat pumps. Heating a house will always be a compromise between comfort, cost and environmental impact, hence the name. 
 
 ---
 
 # Warning
 
 This tool is used at your own risk. An incorrect setup can lead to damage to your heat pump or house.
+
+Also consider that having your heating system depend on Home Assistant and external hardware creates a dependency that may lead to your heating system not working if something goes wrong. Make sure you have a fail safe operation in place.
 
 # Project status
 The basic framework has been implemented, the next step is to implement actual control logic that computes the simulated output temperature to be sent to the heat pump. Therefore, it is currently only suitable for developers.
