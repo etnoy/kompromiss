@@ -20,6 +20,7 @@
           "mpc": "MPC-styrparametrar",
           "heater": "Värmepump-inställningar",
           "output": "Inställningar för simulerad utetemperatur",
+          "pricing": "Elprisinställningar",
           "thermal": "Termiska modellparametrar"
         }
       },
@@ -90,6 +91,20 @@
           "highest_simulated_temperature": "Maximivärde för simulerad utetemperatur (°C).",
           "simulated_outdoor_move_penalty": "Straffar snabba förändringar i styrningen. Högre = jämnare drift."
         }
+      },
+      "pricing": {
+        "title": "Elprisinställningar",
+        "description": "Konfigurera inställningar för elpriser.",
+        "data": {
+          "electricity_price_enabled": "Aktivera elprisstyrning",
+          "electricity_price_area": "Elpriscellområde",
+          "electricity_price_currency": "Valuta"
+        },
+        "data_description": {
+          "electricity_price_enabled": "Aktivera elprisstyrning.",
+          "electricity_price_area": "Områdeskod för Nordpool (t.ex. FI, LV, DK1, DK2 m.fl.).",
+          "electricity_price_currency": "Valutakod för priser (EUR, DKK, NOK, PLN eller SEK). Uppdatera reglerparametrarna eftersom energikostnadsskalan beror på det numeriska prisvärdet."
+        }
       }
     }
   },
@@ -105,7 +120,7 @@
         "name": "Innetemperatur"
       },
       "temperature_offset": {
-        "name": "Påverkan"
+        "name": "Regleringens påverkan"
       },
       "electricity_price": {
         "name": "Elpris"
@@ -123,9 +138,6 @@
       },
       "minimum_indoor_temperature": {
         "name": "Lägsta tillåtna innetemperatur"
-      },
-      "maximum_indoor_temperature": {
-        "name": "Högsta tillåtna innetemperatur"
       }
     }
   }

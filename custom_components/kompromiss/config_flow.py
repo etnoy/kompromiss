@@ -16,6 +16,9 @@ from homeassistant.core import callback
 from homeassistant.helpers import selector
 
 from .const import (
+    DEFAULT_ELECTRICITY_PRICE_AREA,
+    DEFAULT_ELECTRICITY_PRICE_CURRENCY,
+    DEFAULT_ELECTRICITY_PRICE_ENABLED,
     DEFAULT_HEAT_CURVE_INTERCEPT,
     DEFAULT_HEAT_CURVE_SLOPE,
     DEFAULT_HEATER_THERMAL_POWER,
@@ -31,6 +34,9 @@ from .const import (
     DEFAULT_TIME_STEP,
     DOMAIN,
     ACTUAL_OUTDOOR_TEMPERATURE_SENSOR,
+    ELECTRICITY_PRICE_AREA,
+    ELECTRICITY_PRICE_CURRENCY,
+    ELECTRICITY_PRICE_ENABLED,
     HEAT_CURVE_INTERCEPT,
     HEAT_CURVE_SLOPE,
     HEATER_THERMAL_POWER,
@@ -64,7 +70,6 @@ class ConfigFlowHandler(ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None):
-        """Handle the initial step."""
         if user_input is not None:
             return self.async_create_entry(title="Kompromiss", data=user_input)
 
@@ -112,7 +117,7 @@ class KompromissOptionsFlowHandler(OptionsFlow):
         """Manage the options - main menu."""
         return self.async_show_menu(
             step_id="init",
-            menu_options=["mpc", "heater", "output", "thermal"],
+            menu_options=["mpc", "heater", "output", "pricing", "thermal"],
         )
 
     async def async_step_mpc(self, user_input: dict[str, Any] | None = None):
@@ -131,7 +136,7 @@ class KompromissOptionsFlowHandler(OptionsFlow):
                 ): selector.NumberSelector(
                     selector.NumberSelectorConfig(
                         min=1,
-                        max=100,
+                        max=1000,
                         step=1,
                         mode=selector.NumberSelectorMode.BOX,
                     )
@@ -350,6 +355,45 @@ class KompromissOptionsFlowHandler(OptionsFlow):
             description_placeholders={
                 "description": "Simulated Outdoor Temperature Options."
             },
+        )
+
+    async def async_step_pricing(self, user_input: dict[str, Any] | None = None):
+        """Handle pricing parameters."""
+        if user_input is not None:
+            return self.async_create_entry(data=user_input)
+
+        schema = vol.Schema(
+            {
+                vol.Optional(
+                    ELECTRICITY_PRICE_ENABLED,
+                    default=self.config_entry.options.get(
+                        ELECTRICITY_PRICE_ENABLED,
+                        DEFAULT_ELECTRICITY_PRICE_ENABLED,
+                    ),
+                ): selector.BooleanSelector(),
+                vol.Optional(
+                    ELECTRICITY_PRICE_AREA,
+                    default=self.config_entry.options.get(
+                        ELECTRICITY_PRICE_AREA,
+                        DEFAULT_ELECTRICITY_PRICE_AREA,
+                    ),
+                ): selector.TextSelector(),
+                vol.Optional(
+                    ELECTRICITY_PRICE_CURRENCY,
+                    default=self.config_entry.options.get(
+                        ELECTRICITY_PRICE_CURRENCY,
+                        DEFAULT_ELECTRICITY_PRICE_CURRENCY,
+                    ),
+                ): selector.TextSelector(),
+            }
+        )
+
+        return self.async_show_form(
+            step_id="pricing",
+            data_schema=self.add_suggested_values_to_schema(
+                schema, self.config_entry.options
+            ),
+            description_placeholders={"description": "Electricity pricing options."},
         )
 
     async def async_step_thermal(self, user_input: dict[str, Any] | None = None):

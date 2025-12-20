@@ -1,5 +1,7 @@
 from typing import Any
 
+from .electricity import ElectricityPriceData
+
 
 class ControllerState:
     """Holds the current state of the controller."""
@@ -16,6 +18,7 @@ class ControllerState:
         self.projected_medium_temperature: list[dict[str, Any]] | None = None
         self.return_temperature_setpoint: float | None = None
         self.computation_time: float | None = None
+        self.electricity_price: list[ElectricityPriceData] = []
 
     def is_valid(self) -> bool:
         """Check if the state has valid temperature readings."""

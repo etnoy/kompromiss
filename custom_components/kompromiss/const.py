@@ -24,6 +24,19 @@ DEFAULT_THERMAL_RESISTANCE = 0.005
 THERMAL_CAPACITANCE = "thermal_capacitance"
 DEFAULT_THERMAL_CAPACITANCE = 3.6e6
 
+ELECTRICITY_PRICE_ENABLED = "electricity_price_enabled"
+DEFAULT_ELECTRICITY_PRICE_ENABLED = False
+ELECTRICITY_PRICE_AREA = "electricity_price_area"
+DEFAULT_ELECTRICITY_PRICE_AREA = ""
+ELECTRICITY_PRICE_CURRENCY = "electricity_price_currency"
+DEFAULT_ELECTRICITY_PRICE_CURRENCY = ""
+
+# How many hours of future electricity price data we require to enable price control
+ELECTRICITY_PRICE_MINIMUM_HOURS_AVAILABLE = 8
+
+ELECTRICITY_PRICE_UPDATE_INTERVAL = 60 * 60  # 1 hour in seconds
+ELECTRICITY_PRICE_TIME_STEP = 900  # 15 minutes in seconds
+
 MEDIUM_TO_BUILDING_THERMAL_RESISTANCE = "medium_to_building_thermal_resistance"
 DEFAULT_MEDIUM_TO_BUILDING_THERMAL_RESISTANCE = 0.0035
 MEDIUM_TO_OUTDOOR_THERMAL_RESISTANCE = "medium_to_outdoor_thermal_resistance"

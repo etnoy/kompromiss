@@ -20,6 +20,7 @@
           "mpc": "MPC Control Parameters",
           "heater": "Heater / Heat Pump Settings",
           "output": "Simulated Outdoor Temperature Settings",
+          "pricing": "Electricity Pricing Options",
           "thermal": "Thermal Model Parameters"
         }
       },
@@ -90,6 +91,20 @@
           "highest_simulated_temperature": "Maximum value for the simulated outdoor temperature (°C). Set this below your heaters's summer mode threshold to prevent the circulation pump from stopping.",
           "simulated_outdoor_move_penalty": "Penalizes rapid changes in control output. Higher = smoother operation."
         }
+      },
+      "pricing": {
+        "title": "Electricity Pricing Options",
+        "description": "Configure electricity pricing settings.",
+        "data": {
+          "electricity_price_enabled": "Enable Electricity Price Integration",
+          "electricity_price_area": "Electricity Price Area",
+          "electricity_price_currency": "Currency"
+        },
+        "data_description": {
+          "electricity_price_enabled": "Enable integration with electricity price data to optimize heating based on energy costs.",
+          "electricity_price_area": "Nordpool price area code (e.g., FI, LV, DK1, DK2, please refer to Nordpool).",
+          "electricity_price_currency": "Currency code (EUR, DKK, NOK, PLN, or SEK). Please update control parameters since energy cost scaling will depend the numerical price value."
+        }
       }
     }
   },
@@ -123,9 +138,6 @@
       },
       "minimum_indoor_temperature": {
         "name": "Minimum Indoor Temperature"
-      },
-      "maximum_indoor_temperature": {
-        "name": "Maximum Indoor Temperature"
       }
     }
   }

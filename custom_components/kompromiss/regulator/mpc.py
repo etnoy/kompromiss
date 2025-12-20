@@ -18,8 +18,10 @@ import numpy as np
 import casadi as ca
 
 from ..const import (
-    COMFORT_BAND_VIOLATION_PENALTY,
     DEFAULT_COMFORT_BAND_VIOLATION_PENALTY,
+    DEFAULT_ELECTRICITY_PRICE_AREA,
+    DEFAULT_ELECTRICITY_PRICE_CURRENCY,
+    DEFAULT_ELECTRICITY_PRICE_ENABLED,
     DEFAULT_ENERGY_COST_PENALTY,
     DEFAULT_HEAT_CURVE_INTERCEPT,
     DEFAULT_HEAT_CURVE_SLOPE,
@@ -39,11 +41,8 @@ from ..const import (
     DEFAULT_THERMAL_CAPACITANCE,
     DEFAULT_THERMAL_RESISTANCE,
     DEFAULT_TIME_STEP,
-    ENERGY_COST_PENALTY,
-    MINIMUM_INDOOR_TEMPERATURE,
-    SIMULATED_OUTDOOR_MOVE_PENALTY,
-    TARGET_TEMPERATURE,
-    TEMPERATURE_DEVIATION_PENALTY,
+    ELECTRICITY_PRICE_TIME_STEP,
+    ELECTRICITY_PRICE_MINIMUM_HOURS_AVAILABLE,
 )
 
 from . import Regulator
@@ -61,7 +60,9 @@ class MPCParameters:
     thermal_capacitance: float = DEFAULT_THERMAL_CAPACITANCE
 
     # Thermal medium (water loop) parameters
-    medium_to_room_resistance: float = DEFAULT_MEDIUM_TO_BUILDING_THERMAL_RESISTANCE
+    medium_to_building_thermal_resistance: float = (
+        DEFAULT_MEDIUM_TO_BUILDING_THERMAL_RESISTANCE
+    )
     medium_to_outdoor_thermal_resistance: float = (
         DEFAULT_MEDIUM_TO_OUTDOOR_THERMAL_RESISTANCE
     )
@@ -90,6 +91,25 @@ class MPCParameters:
     energy_cost_penalty: float = DEFAULT_ENERGY_COST_PENALTY
     simulated_outdoor_move_penalty: float = DEFAULT_SIMULATED_OUTDOOR_MOVE_PENALTY
 
+    # Electricity price settings
+    electricity_price_enabled: bool = DEFAULT_ELECTRICITY_PRICE_ENABLED
+    electricity_price_area: str = DEFAULT_ELECTRICITY_PRICE_AREA
+    electricity_price_currency: str = DEFAULT_ELECTRICITY_PRICE_CURRENCY
+
+    def __repr__(self) -> str:
+        """Return string representation of MPCParameters."""
+        # Get all class attributes with defaults
+        all_attrs = {
+            k: v
+            for k, v in type(self).__dict__.items()
+            if not k.startswith("_") and not callable(v)
+        }
+        # Override with any instance attributes
+        all_attrs.update(self.__dict__)
+
+        attrs = "\n".join(f"{key}={value!r}" for key, value in all_attrs.items())
+        return f"MPCParameters({attrs})"
+
 
 class MPCRegulator(Regulator):
     """Full MPC regulator using a 1R1C + medium thermal model.
@@ -106,118 +126,31 @@ class MPCRegulator(Regulator):
     def __init__(self) -> None:
         self._state: ControllerState = ControllerState()
         self._parameters: MPCParameters = MPCParameters()
-        self._time_step: float = self._parameters.time_step
         super().__init__()
 
     def set_state(self, state: ControllerState) -> None:
-        """Set the current state including outdoor and indoor temperatures.
-
-        Args:
-            state: ControllerState object with actual_outdoor_temperature and indoor_temperature
-        """
+        """Set the current state including outdoor and indoor temperatures."""
         self._state = state
 
     def get_state(self) -> ControllerState:
         """Return the current controller state."""
         return self._state
 
-    def set_weight_temperature_deviation(self, value: float) -> None:
-        """Update the weight for temperature deviation from target.
-
-        Args:
-            value: New weight value for temperature deviation cost
-        """
-        self._parameters.temperature_deviation_penalty = value
-
-        _LOGGER.debug("MPC weight for temperature deviation updated to %.2f", value)
-
-    def set_weight_comfort_band_violation(self, value: float) -> None:
-        """Update the weight for comfort band violations.
-
-        Args:
-            value: New weight value for comfort band violation cost
-        """
-        self._parameters.comfort_band_violation_penalty = value
-
-        _LOGGER.debug("MPC weight for comfort band violation updated to %.2f", value)
-
     def update_parameters_from_options(self, options: dict) -> None:
-        """Update all MPC parameters from config entry options.
+        """Update all MPC parameters from config entry options."""
 
-        Args:
-            options: Dictionary of options from config entry
-        """
+        _LOGGER.debug("Updating parameters from options: %s", options)
 
-        if TARGET_TEMPERATURE in options:
-            self._parameters.target_temperature = options[TARGET_TEMPERATURE]
-        if MINIMUM_INDOOR_TEMPERATURE in options:
-            self._parameters.lower_temperature_bound = options[
-                MINIMUM_INDOOR_TEMPERATURE
-            ]
+        for key, value in options.items():
+            if not hasattr(self._parameters, key):
+                raise ValueError(f"Unknown option key: {key}")
 
-        if "r_thermal" in options:
-            self._parameters.thermal_resistance = options["r_thermal"]
-        if "c_thermal" in options:
-            self._parameters.thermal_capacitance = options["c_thermal"]
-        if "r_medium_to_room" in options:
-            self._parameters.medium_to_room_resistance = options["r_medium_to_room"]
-        if "r_medium_to_environment" in options:
-            self._parameters.medium_to_outdoor_thermal_resistance = options[
-                "r_medium_to_environment"
-            ]
-        if "c_medium" in options:
-            self._parameters.medium_thermal_capacity = options["c_medium"]
-
-        if "heat_pump_thermal_power" in options:
-            self._parameters.heater_thermal_power = options["heat_pump_thermal_power"]
-        if "heat_pump_heat_transfer_coeff" in options:
-            self._parameters.heater_transfer_coefficient = options[
-                "heat_pump_heat_transfer_coeff"
-            ]
-        if "return_temperature_min" in options:
-            self._parameters.minimum_medium_return_temperature = options[
-                "return_temperature_min"
-            ]
-        if "return_temperature_max" in options:
-            self._parameters.maximum_medium_return_temperature = options[
-                "return_temperature_max"
-            ]
-
-        if "heat_curve_slope" in options:
-            self._parameters.heat_curve_slope = options["heat_curve_slope"]
-        if "heat_curve_intercept" in options:
-            self._parameters.heat_curve_intercept = options["heat_curve_intercept"]
-
-        if "time_step" in options:
-            self._parameters.time_step = options["time_step"]
-            self._time_step = options["time_step"]
-        if "ramp_limit_outdoor" in options:
-            self._parameters.outdoor_ramp_limit = options["ramp_limit_outdoor"]
-
-        if TEMPERATURE_DEVIATION_PENALTY in options:
-            self._parameters.temperature_deviation_penalty = options[
-                TEMPERATURE_DEVIATION_PENALTY
-            ]
-        if COMFORT_BAND_VIOLATION_PENALTY in options:
-            self._parameters.comfort_band_violation_penalty = options[
-                COMFORT_BAND_VIOLATION_PENALTY
-            ]
-        if ENERGY_COST_PENALTY in options:
-            self._parameters.energy_cost_penalty = options[ENERGY_COST_PENALTY]
-        if SIMULATED_OUTDOOR_MOVE_PENALTY in options:
-            self._parameters.simulated_outdoor_move_penalty = options[
-                SIMULATED_OUTDOOR_MOVE_PENALTY
-            ]
+            setattr(self._parameters, key, value)
 
     def _heat_from_return_setpoint(
         self, return_temp: ca.SX, medium_temp: ca.SX
     ) -> ca.SX:
-        """Convert a return temperature setpoint to heat flow into the medium.
-
-        The heat pump tries to lift the medium temperature towards the
-        setpoint. The delivered heat is capped by the maximum thermal power and
-        cannot be negative.
-        """
+        """Convert a simulated outdoor temperature setpoint to a medium temperature setpoint via the heat curve."""
 
         delta = return_temp - medium_temp
         raw_heat = self._parameters.heater_transfer_coefficient * delta
@@ -233,18 +166,13 @@ class MPCRegulator(Regulator):
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """Solve MPC using CasADi IPOPT with room + medium dynamics."""
 
-        time_step = self._time_step
-        outdoor_temp = self._state.actual_outdoor_temperature
-        slope = self._parameters.heat_curve_slope
-        intercept = self._parameters.heat_curve_intercept
-        ramp_limit = self._parameters.outdoor_ramp_limit
-        move_weight = self._parameters.simulated_outdoor_move_penalty
-
-        if slope == 0:
+        if self._parameters.heat_curve_slope == 0:
             raise RuntimeError("Heat curve slope cannot be zero")
 
         def _simulated_outdoor(u: ca.SX) -> ca.SX:
-            return (u - intercept) / slope
+            return (
+                u - self._parameters.heat_curve_intercept
+            ) / self._parameters.heat_curve_slope
 
         # Decision variables
         return_temp_setpoints = ca.SX.sym("u_return", horizon)
@@ -253,37 +181,80 @@ class MPCRegulator(Regulator):
         slack_lower = ca.SX.sym("sL", horizon)
         slack_upper = ca.SX.sym("sH", horizon)
 
-        # Objective
+        # Objective function
         objective = 0
         for step in range(horizon):
             # We only penalize temperature error when below the target, not above
             temperature_error = ca.fmin(
                 0, room_temps[step] - self._parameters.target_temperature
             )
+
+            # Heat flow is computed from the return setpoint via the heat curve
             heat_flow = self._heat_from_return_setpoint(
                 return_temp_setpoints[step], medium_temps[step]
             )
-            energy_cost = (
-                heat_flow / 1000 * self._state.electricity_price[step].price / 4
-            )
+
+            # Only factor in energy cost if price control is enabled
+            energy_cost: float | None = None
+            if self._parameters.electricity_price_enabled:
+                # Map simulated step to nearest electricity price point
+                price_index = int(
+                    round(
+                        (step * self._parameters.time_step)
+                        / ELECTRICITY_PRICE_TIME_STEP
+                    )
+                )
+                price_index = min(
+                    len(self._state.electricity_price) - 1, max(0, price_index)
+                )
+
+                price = self._state.electricity_price[price_index].price
+                energy_cost = (
+                    heat_flow / 1000 * price * (self._parameters.time_step / 3600)
+                )
+
+            simulated_outdoor_temperature_delta: float
 
             if step == 0:
-                delta_simulated = (
+                simulated_outdoor_temperature_delta = (
                     _simulated_outdoor(return_temp_setpoints[step])
                     - prev_simulated_outdoor
                 )
             else:
-                delta_simulated = _simulated_outdoor(
+                simulated_outdoor_temperature_delta = _simulated_outdoor(
                     return_temp_setpoints[step]
                 ) - _simulated_outdoor(return_temp_setpoints[step - 1])
+
+            temperature_deviation_objective = (
+                self._parameters.temperature_deviation_penalty * (temperature_error**2)
+            )
+
+            comfort_band_objective = self._parameters.comfort_band_violation_penalty * (
+                slack_lower[step] ** 2 + slack_upper[step] ** 2
+            )
+
+            energy_cost_objective = 0
+            if self._parameters.electricity_price_enabled:
+                if energy_cost is None:
+                    raise RuntimeError(
+                        "Energy cost is None despite price control being enabled"
+                    )
+
+                energy_cost_objective = (
+                    self._parameters.energy_cost_penalty * energy_cost
+                )
+
+            outdoor_move_penalty = self._parameters.simulated_outdoor_move_penalty * (
+                simulated_outdoor_temperature_delta**2
+            )
+
+            # Add all the objectives together
             objective = (
                 objective
-                + self._parameters.temperature_deviation_penalty
-                * (temperature_error**2)
-                + self._parameters.comfort_band_violation_penalty
-                * (slack_lower[step] ** 2 + slack_upper[step] ** 2)
-                + self._parameters.energy_cost_penalty * energy_cost
-                + move_weight * (delta_simulated**2)
+                + temperature_deviation_objective
+                + comfort_band_objective
+                + energy_cost_objective
+                + outdoor_move_penalty
             )
 
         constraints: list[ca.SX] = []
@@ -305,27 +276,27 @@ class MPCRegulator(Regulator):
                 return_temp_setpoints[step], medium_temps[step]
             )
 
-            next_room = room_temps[step] + time_step * (
-                (outdoor_temp - room_temps[step])
+            next_room = room_temps[step] + self._parameters.time_step * (
+                (self._state.actual_outdoor_temperature - room_temps[step])
                 / (
                     self._parameters.thermal_resistance
                     * self._parameters.thermal_capacitance
                 )
                 + (medium_temps[step] - room_temps[step])
                 / (
-                    self._parameters.medium_to_room_resistance
+                    self._parameters.medium_to_building_thermal_resistance
                     * self._parameters.thermal_capacitance
                 )
             )
 
-            next_medium = medium_temps[step] + time_step * (
+            next_medium = medium_temps[step] + self._parameters.time_step * (
                 heat_flow / self._parameters.medium_thermal_capacity
                 - (medium_temps[step] - room_temps[step])
                 / (
-                    self._parameters.medium_to_room_resistance
+                    self._parameters.medium_to_building_thermal_resistance
                     * self._parameters.medium_thermal_capacity
                 )
-                - (medium_temps[step] - outdoor_temp)
+                - (medium_temps[step] - self._state.actual_outdoor_temperature)
                 / (
                     self._parameters.medium_to_outdoor_thermal_resistance
                     * self._parameters.medium_thermal_capacity
@@ -349,18 +320,18 @@ class MPCRegulator(Regulator):
             constraints_upper.append(ca.inf)
 
             if step == 0:
-                delta_simulated = (
+                simulated_outdoor_temperature_delta = (
                     _simulated_outdoor(return_temp_setpoints[step])
                     - prev_simulated_outdoor
                 )
             else:
-                delta_simulated = _simulated_outdoor(
+                simulated_outdoor_temperature_delta = _simulated_outdoor(
                     return_temp_setpoints[step]
                 ) - _simulated_outdoor(return_temp_setpoints[step - 1])
 
-            constraints.append(delta_simulated)
-            constraints_lower.append(-ramp_limit)
-            constraints_upper.append(ramp_limit)
+            constraints.append(simulated_outdoor_temperature_delta)
+            constraints_lower.append(-self._parameters.outdoor_ramp_limit)
+            constraints_upper.append(self._parameters.outdoor_ramp_limit)
 
         decision_vars = ca.vertcat(
             return_temp_setpoints, room_temps, medium_temps, slack_lower, slack_upper
@@ -448,42 +419,62 @@ class MPCRegulator(Regulator):
         )
 
     async def async_regulate(self) -> float:
-        """Run MPC to compute optimal simulated outdoor temperature.
+        """Run MPC to compute optimal simulated outdoor temperature."""
 
-        The MPC algorithm:
-        1. Predict future indoor and medium temperatures over horizon
-        2. Optimize return temperature setpoints to minimize deviation and energy use
-        3. Convert the first return setpoint to a simulated outdoor temperature using the heat curve
-        4. Lower simulated temp → higher return setpoint → more heat
-        """
+        _LOGGER.debug(
+            "Running Model Predictive Control with parameters\n%s",
+            self._parameters,
+        )
+
         if self._parameters.heat_curve_slope == 0:
             raise RuntimeError("Heat curve slope cannot be zero")
 
         if self._state is None or not self._state.is_valid():
             raise RuntimeError("Invalid controller state for MPC regulation")
 
-        if self._state.electricity_price is None:
-            raise RuntimeError("No electricity price data available for MPC regulation")
+        if self._parameters.electricity_price_enabled:
+            if (
+                self._state.electricity_price is None
+                or len(self._state.electricity_price) < 0
+            ):
+                raise RuntimeError(
+                    "No electricity price data available for MPC regulation"
+                )
 
-        horizon = self._parameters.prediction_horizon
+        horizon = int(self._parameters.prediction_horizon)
 
-        if len(self._state.electricity_price) < horizon:
-            horizon = len(self._state.electricity_price)
-
-            # If we have at least 8h of data we will truncate the horizon and proceed anyway
+        if (
+            self._parameters.electricity_price_enabled
+            and len(self._state.electricity_price) * ELECTRICITY_PRICE_TIME_STEP
+            < horizon * self._parameters.time_step
+        ):
+            # If we have at least 8h (default) of data we will truncate the horizon and proceed anyway
             # This can happen shortly before 13:00 when nordpool publishes next day's prices
-            if horizon * self._parameters.time_step >= 3600 * 8:
+            if (
+                len(self._state.electricity_price) * ELECTRICITY_PRICE_TIME_STEP
+                >= 3600 * ELECTRICITY_PRICE_MINIMUM_HOURS_AVAILABLE
+            ):
+                horizon = np.floor(
+                    len(self._state.electricity_price)
+                    * ELECTRICITY_PRICE_TIME_STEP
+                    / self._parameters.time_step
+                )
+
                 _LOGGER.warning(
                     "Electricity price data is not available for the full prediction horizon, "
                     "only %d points available which covers %.1f hours. "
                     "Proceeding anyway but truncating horizon from %d.",
-                    horizon,
-                    horizon * self._parameters.time_step / 3600,
+                    len(self._state.electricity_price),
+                    len(self._state.electricity_price)
+                    * ELECTRICITY_PRICE_TIME_STEP
+                    / 3600,
                     self._parameters.prediction_horizon,
                 )
+
             else:
                 raise RuntimeError(
-                    f"Insufficient electricity price data for MPC regulation. Only {horizon} points available."
+                    "Insufficient electricity price data for MPC regulation. "
+                    f"Only {len(self._state.electricity_price)} points available."
                 )
 
         initial_room_temperature = self._state.indoor_temperature
